@@ -9,49 +9,27 @@ interface ProjectState {
   fetchCourses: () => Promise<void>
   createProject: (data: { name: string; description?: string }) => Promise<string>
   createCourse: (data: { name: string; source: string; videoUrl?: string }) => Promise<string>
-  deleteProject: (id: string) => Promise<void>
-  deleteCourse: (id: string) => Promise<void>
+  deleteProject: (projectId: string) => Promise<void>
+  deleteCourse: (courseId: string) => Promise<void>
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
   projects: [],
   courses: [],
-
   fetchProjects: async () => {
-    try {
-      set({ projects: await projectService.fetchProjects() })
-    } catch (e) {
-      console.error(e)
-    }
+    try { set({ projects: await projectService.fetchProjects() }) } catch (e) { console.error(e) }
   },
-
   fetchCourses: async () => {
-    try {
-      set({ courses: await projectService.fetchCourses() })
-    } catch (e) {
-      console.error(e)
-    }
+    try { set({ courses: await projectService.fetchCourses() }) } catch (e) { console.error(e) }
   },
-
-  createProject: async (data) => {
-    const id = await projectService.createProject(data)
-    await useProjectStore.getState().fetchProjects()
-    return id
+  createProject: async (data) => await projectService.createProject(data),
+  createCourse: async (data) => await projectService.createCourse(data),
+  deleteProject: async (projectId) => {
+    await projectService.deleteProject(projectId)
+    set((state) => ({ projects: state.projects.filter((p) => p.id !== projectId) }))
   },
-
-  createCourse: async (data) => {
-    const id = await projectService.createCourse(data)
-    await useProjectStore.getState().fetchCourses()
-    return id
-  },
-
-  deleteProject: async (id) => {
-    await projectService.deleteProject(id)
-    await useProjectStore.getState().fetchProjects()
-  },
-
-  deleteCourse: async (id) => {
-    await projectService.deleteCourse(id)
-    await useProjectStore.getState().fetchCourses()
+  deleteCourse: async (courseId) => {
+    await projectService.deleteCourse(courseId)
+    set((state) => ({ courses: state.courses.filter((c) => c.id !== courseId) }))
   },
 }))

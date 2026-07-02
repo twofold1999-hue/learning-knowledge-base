@@ -1,77 +1,56 @@
 import type { Project, Course } from '../types'
-
-const PROJECTS_KEY = 'learning_app_projects'
-const COURSES_KEY = 'learning_app_courses'
-
-function delay(ms = 100) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function readStorage<T>(key: string): T[] {
-  const raw = localStorage.getItem(key)
-  return raw ? JSON.parse(raw) : []
-}
-
-function writeStorage<T>(key: string, data: T[]) {
-  localStorage.setItem(key, JSON.stringify(data))
-}
+import { db, generateId } from './db'
 
 export async function fetchProjects(): Promise<Project[]> {
-  await delay()
-  return readStorage<Project>(PROJECTS_KEY)
-}
-
-export async function createProject(data: { name: string; description?: string }): Promise<string> {
-  await delay()
-  const id = 'proj_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
-  const now = new Date().toISOString()
-  const project: Project = {
-    id,
-    name: data.name,
-    description: data.description || '',
-    directoryId: null,
-    createdAt: now,
-    updatedAt: now,
-  }
-  const projects = readStorage<Project>(PROJECTS_KEY)
-  projects.push(project)
-  writeStorage(PROJECTS_KEY, projects)
-  return id
-}
-
-export async function deleteProject(id: string): Promise<void> {
-  await delay()
-  const projects = readStorage<Project>(PROJECTS_KEY)
-  writeStorage(PROJECTS_KEY, projects.filter((p) => p.id !== id))
+  return db.projects.toArray()
 }
 
 export async function fetchCourses(): Promise<Course[]> {
-  await delay()
-  return readStorage<Course>(COURSES_KEY)
+  return db.courses.toArray()
 }
 
-export async function createCourse(data: { name: string; source: string; videoUrl?: string }): Promise<string> {
-  await delay()
-  const id = 'course_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
+export async function createProject(data: { name: string; description?: string }): Promise<string> {
+  const id = generateId('proj')
   const now = new Date().toISOString()
-  const course: Course = {
-    id,
-    name: data.name,
-    source: data.source,
-    totalChapters: null,
-    videoUrl: data.videoUrl || null,
-    directoryId: null,
-    createdAt: now,
-    updatedAt: now,
+  const project: Project = {
+    id, name: data.name, description: data.description || '',
+    directoryId: null, createdAt: now, updatedAt: now,
   }
-  const courses = readStorage<Course>(COURSES_KEY)
-  courses.push(course)
-  writeStorage(COURSES_KEY, courses)
+  await db.projects.put(project)
   return id
 }
 
-export async function deleteCourse(id: string): Promise<void> {
-  await delay()
-  const courses = readStorage<Course>(COURSES_KEY)
-  writeStorage(COURSES_KEY, courses.filter((c) => c.id !== id))
+export async function createCourse(data: { name: string; source: string; videoUrl?: string }): Promise<string> {
+  const id = generateId('course')
+  const now = new Date().toISOString()
+  const course: Course = {
+    id, name: data.name, source: data.source, totalChapters: null,
+    videoUrl: data.videoUrl || null, directoryId: null, createdAt: now, updatedAt: now,
+  }
+  await db.courses.put(course)
+  return id
+}
+
+export async function updateProject(projectId: string, data: Partial<Project>): Promise<void> {
+  const project = await db.projects.get(projectId)
+  if (!project) throw new Error('Project not found')
+  await db.projects.put({ ...project, ...data, updatedAt: new Date().toISOString() })
+}
+
+export async function updateCourse(courseId: string, data: Partial<Course>): Promise<void> {
+  const course = await db.courses.get(courseId)
+  if (!course) throw new Error('Course not found')
+  await db.courses.put({ ...course, ...data, updatedAt: new Date().toISOString() })
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  await db.projects.delete(projectId)
+  const notes = await db.notes.where('projectId').equals(projectId).toArray()
+  await db.notes.bulkDelete(notes.map((n) => n.id))
+}
+
+export async function deleteCourse(courseId: string): Promise<void> {
+  await db.courses.delete(courseId)
+  const notes = await db.notes.where('courseId').equals(courseId).toArray()
+  await db.notes.bulkDelete(notes.map((n) => n.id))
 }

@@ -1,35 +1,17 @@
-const IMAGE_KEY = 'learning_app_images'
-
-interface StoredImage {
-  id: string
-  data: string
-  createdAt: string
-}
-
-function readImages(): Record<string, StoredImage> {
-  const raw = localStorage.getItem(IMAGE_KEY)
-  return raw ? JSON.parse(raw) : {}
-}
-
-function writeImages(images: Record<string, StoredImage>) {
-  localStorage.setItem(IMAGE_KEY, JSON.stringify(images))
-}
+import { db, generateId, type ImageRecord } from './db'
 
 export function saveImage(base64: string): string {
-  const id = 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
-  const images = readImages()
-  images[id] = { id, data: base64, createdAt: new Date().toISOString() }
-  writeImages(images)
+  const id = generateId('img')
+  const record: ImageRecord = { id, data: base64, createdAt: new Date().toISOString() }
+  db.images.put(record)
   return id
 }
 
-export function getImage(id: string): string | null {
-  const images = readImages()
-  return images[id]?.data || null
+export async function getImage(id: string): Promise<string | null> {
+  const record = await db.images.get(id)
+  return record?.data || null
 }
 
-export function deleteImage(id: string) {
-  const images = readImages()
-  delete images[id]
-  writeImages(images)
+export async function deleteImage(id: string): Promise<void> {
+  await db.images.delete(id)
 }

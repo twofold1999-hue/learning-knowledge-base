@@ -6,8 +6,8 @@ import HomePage from './pages/HomePage'
 import EditorPage from './pages/EditorPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import CourseDetailPage from './pages/CourseDetailPage'
-import SettingsPage from './pages/SettingsPage'
 import SearchPage from './pages/SearchPage'
+import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
   const initTheme = useUiStore((s) => s.initTheme)
