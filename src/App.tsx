@@ -7,7 +7,6 @@ import EditorPage from './pages/EditorPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import CourseDetailPage from './pages/CourseDetailPage'
 import SettingsPage from './pages/SettingsPage'
-import SearchPage from './pages/SearchPage'
 
 export default function App() {
   const initTheme = useUiStore((s) => s.initTheme)
@@ -19,7 +18,6 @@ export default function App() {
         <Route path="/editor/:noteId" element={<EditorPage />} />
         <Route path="/project/:projectId" element={<ProjectDetailPage />} />
         <Route path="/course/:courseId" element={<CourseDetailPage />} />
-        <Route path="/search" element={<SearchPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </Layout>
