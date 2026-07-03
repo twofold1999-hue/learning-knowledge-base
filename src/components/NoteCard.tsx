@@ -22,7 +22,6 @@ export default function NoteCard({ note }: { note: Note }) {
     if (days < 30) return days + ' 天前'
     return new Date(dateStr).toLocaleDateString('zh-CN')
   }
-
   return (
     <div onClick={() => navigate('/editor/' + note.id)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '20px', marginBottom: '12px', cursor: 'pointer', transition: 'all 0.2s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
