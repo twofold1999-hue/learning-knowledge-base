@@ -193,3 +193,55 @@ input, textarea { font-family: inherit; }
   text-align: left;
 }
 .markdown-preview th { background: var(--surface-2); font-weight: 600; }
+
+
+/* ===== 动画与交互 ===== */
+.note-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.note-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  border-color: var(--accent);
+}
+
+/* 按钮 hover */
+button {
+  transition: all 0.15s ease;
+}
+button:hover {
+  opacity: 0.85;
+}
+button:active {
+  transform: scale(0.97);
+}
+
+/* 侧边栏项 hover */
+aside div[style*="cursor: pointer"]:hover {
+  background: var(--surface-2) !important;
+}
+
+/* 链接 hover */
+.markdown-preview a {
+  transition: color 0.15s;
+}
+.markdown-preview a[href^="#note:"] {
+  color: var(--cyan);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--cyan);
+  cursor: pointer;
+}
+.markdown-preview a[href^="#note:"]:hover {
+  opacity: 0.7;
+}
+
+/* 输入框聚焦 */
+input:focus, textarea:focus {
+  transition: border-color 0.2s;
+}
+
+/* 弹窗淡入 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

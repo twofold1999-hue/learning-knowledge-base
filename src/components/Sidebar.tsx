@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useProjectStore } from '../stores/projectStore'
 import { useNoteStore } from '../stores/noteStore'
+import { getTagColor } from '../utils/tagColors'
 
 export default function Sidebar() {
   const navigate = useNavigate()
@@ -13,7 +14,6 @@ export default function Sidebar() {
   notes.forEach((n) => n.tags.forEach((t) => tagSet.set(t, (tagSet.get(t) || 0) + 1)))
   const tags = Array.from(tagSet.entries()).sort((a, b) => b[1] - a[1])
 
-  // 从 URL 读取当前选中的标签
   const searchParams = new URLSearchParams(location.search)
   const activeTag = searchParams.get('tag')
 
@@ -34,7 +34,7 @@ export default function Sidebar() {
         <span>📋</span> 全部笔记 <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--faint)' }}>{notes.length}</span>
       </div>
       <div style={{ ...s.navItem, ...(location.pathname === '/search' ? s.navItemActive : {}) }} onClick={() => navigate('/search')}>
-        <span>🔍</span> 搜索
+        <span>🔍</span> 搜索 <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--faint)' }}>Ctrl+K</span>
       </div>
       <div style={{ ...s.navItem, ...(location.pathname === '/settings' ? s.navItemActive : {}) }} onClick={() => navigate('/settings')}>
         <span>⚙️</span> 设置
@@ -58,16 +58,19 @@ export default function Sidebar() {
       {tags.length > 0 && (
         <>
           <div style={s.sectionTitle}>标签集合</div>
-          {tags.map(([tag, count]) => (
-            <div
-              key={tag}
-              style={{ ...s.tagItem, ...(activeTag === tag ? s.tagItemActive : {}) }}
-              onClick={() => navigate('/?tag=' + encodeURIComponent(tag))}
-            >
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--cyan)', flexShrink: 0 }}></span>
-              {tag} <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--faint)' }}>{count}</span>
-            </div>
-          ))}
+          {tags.map(([tag, count]) => {
+            const c = getTagColor(tag)
+            return (
+              <div
+                key={tag}
+                style={{ ...s.tagItem, ...(activeTag === tag ? s.tagItemActive : {}) }}
+                onClick={() => navigate('/?tag=' + encodeURIComponent(tag))}
+              >
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: c.dot, flexShrink: 0 }}></span>
+                {tag} <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--faint)' }}>{count}</span>
+              </div>
+            )
+          })}
         </>
       )}
     </aside>

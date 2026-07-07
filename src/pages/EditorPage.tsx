@@ -3,12 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { marked } from 'marked'
 import { useNoteStore } from '../stores/noteStore'
 import { getImage } from '../services/imageService'
-import { lazy, Suspense } from 'react'
+import CodeMirrorEditor from '../components/CodeMirrorEditor'
 import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
-
-// 懒加载编辑器组件(CodeMirror 体积大,只在编辑模式时加载)
-const CodeMirrorEditor = lazy(() => import('../components/CodeMirrorEditor'))
+import { getTagColor } from '../utils/tagColors'
 import type { NoteType } from '../types'
 
 export default function EditorPage() {
@@ -35,10 +33,13 @@ export default function EditorPage() {
   const [renderHtml, setRenderHtml] = useState('')
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const actualNoteId = useRef<string | null>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
 
-  // 收集所有已有标签作为候选
   const allTags = Array.from(new Set(allNotes.flatMap((n) => n.tags)))
   const allConcepts = Array.from(new Set(allNotes.flatMap((n) => n.relatedConcepts)))
+
+  // 笔记标题 → ID 映射(用于 [[笔记链接]] 解析)
+  const titleToId = new Map(allNotes.map((n) => [n.title, n.id]))
 
   const handleSelectType = async (type: NoteType) => {
     setShowTypeDialog(false)
@@ -48,9 +49,11 @@ export default function EditorPage() {
     navigate('/editor/' + id, { replace: true })
   }
 
+  const noteLoaded = useRef(false)
   useEffect(() => {
     if (!isNew && noteId) {
       actualNoteId.current = noteId
+      noteLoaded.current = false
       fetchNote(noteId)
     }
   }, [isNew, noteId, fetchNote])
@@ -61,15 +64,27 @@ export default function EditorPage() {
       setContent(currentNote.content)
       setTags(currentNote.tags)
       setConcepts(currentNote.relatedConcepts)
-      setIsEditMode(!currentNote.content)
+      if (!noteLoaded.current) {
+        setIsEditMode(!currentNote.content)
+        noteLoaded.current = true
+      }
     }
   }, [currentNote])
 
+  // 渲染预览
   useEffect(() => {
     if (isEditMode) return
     let cancelled = false
     const render = async () => {
-      let html = marked.parse(content) as string
+      let md = content
+      // 解析 [[笔记标题]] → markdown 链接
+      md = md.replace(/\x5B\x5B([^\x5D]+)\x5D\x5D/g, (match, noteTitle) => {
+        const id = titleToId.get(noteTitle)
+        if (id) return `[${noteTitle}](#note:${id})`
+        return noteTitle
+      })
+      let html = marked.parse(md) as string
+      // 替换图片标记
       const matches = [...html.matchAll(/<img([^>]*?)src="(img_[^"]+)"/g)]
       for (const match of matches) {
         const id = match[2]
@@ -83,7 +98,21 @@ export default function EditorPage() {
     if (content) render()
     else setRenderHtml('')
     return () => { cancelled = true }
-  }, [content, isEditMode])
+  }, [content, isEditMode, allNotes])
+
+  // 预览区点击:拦截笔记链接
+  const handlePreviewClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    const anchor = target.closest('a')
+    if (anchor) {
+      const href = anchor.getAttribute('href') || ''
+      if (href.startsWith('#note:')) {
+        e.preventDefault()
+        const id = href.slice(6)
+        navigate('/editor/' + id)
+      }
+    }
+  }
 
   const triggerSave = useCallback((field: string, value: any) => {
     if (!actualNoteId.current) return
@@ -127,10 +156,7 @@ export default function EditorPage() {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>选择笔记类型</h3>
-            <button
-              onClick={() => { setShowTypeDialog(false); navigate('/') }}
-              style={{ fontSize: '18px', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
-            >✕</button>
+            <button onClick={() => { setShowTypeDialog(false); navigate('/') }} style={{ fontSize: '18px', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>✕</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <button onClick={() => handleSelectType('knowledge_fragment')} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', padding: '20px', color: 'var(--ink)', fontSize: '16px', fontWeight: 500, textAlign: 'left' }}>
@@ -142,9 +168,7 @@ export default function EditorPage() {
               <div style={{ fontSize: '13px', fontWeight: 400, color: 'var(--muted)' }}>视频/书籍课程的章节笔记</div>
             </button>
           </div>
-          <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12px', color: 'var(--faint)' }}>
-            按 Esc 取消 · 点击外部关闭
-          </div>
+          <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12px', color: 'var(--faint)' }}>按 Esc 取消 · 点击外部关闭</div>
         </div>
       </div>
     )
@@ -154,7 +178,6 @@ export default function EditorPage() {
 
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-      {/* 顶部工具栏 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
         <button onClick={() => navigate(-1)} style={{ fontSize: '14px', color: 'var(--muted)', padding: '4px 8px' }}>← 返回</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -174,7 +197,6 @@ export default function EditorPage() {
         </div>
       </div>
 
-      {/* 标题 */}
       {isEditMode ? (
         <input
           type="text"
@@ -187,7 +209,6 @@ export default function EditorPage() {
         <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--ink)', marginBottom: '12px' }}>{title || '无标题'}</h1>
       )}
 
-      {/* 类型标签 */}
       {currentNote && (
         <div style={{ marginBottom: '16px' }}>
           <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
@@ -196,7 +217,6 @@ export default function EditorPage() {
         </div>
       )}
 
-      {/* 标签区 */}
       <div style={{ marginBottom: '16px' }}>
         <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--faint)', marginBottom: '6px' }}>标签</div>
         {isEditMode ? (
@@ -204,26 +224,29 @@ export default function EditorPage() {
         ) : (
           tags.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {tags.map((tag) => (
-                <span key={tag} style={{ fontSize: '13px', padding: '2px 10px', background: 'var(--accent-soft)', color: 'var(--accent)', borderRadius: '4px' }}>{tag}</span>
-              ))}
+              {tags.map((tag) => {
+                const c = getTagColor(tag)
+                return <span key={tag} style={{ fontSize: '13px', padding: '2px 10px', background: c.bg, color: c.text, borderRadius: '4px' }}>{tag}</span>
+              })}
             </div>
           ) : <span style={{ fontSize: '13px', color: 'var(--faint)' }}>无标签</span>
         )}
       </div>
 
-      {/* 内容区 */}
       {isEditMode ? (
-        <Suspense fallback={<div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>加载编辑器...</div>}>
-          <CodeMirrorEditor
-            value={content}
-            onChange={(val) => { setContent(val); triggerSave('content', val) }}
-            onSave={() => { if (actualNoteId.current) updateNote(actualNoteId.current, { title, content, tags, relatedConcepts: concepts }) }}
-          />
-        </Suspense>
+        <CodeMirrorEditor
+          value={content}
+          onChange={(val) => { setContent(val); triggerSave('content', val) }}
+          onSave={() => { if (actualNoteId.current) updateNote(actualNoteId.current, { title, content, tags, relatedConcepts: concepts }) }}
+        />
       ) : (
         renderHtml ? (
-          <div className="markdown-preview" dangerouslySetInnerHTML={{ __html: renderHtml }} />
+          <div
+            ref={previewRef}
+            className="markdown-preview"
+            dangerouslySetInnerHTML={{ __html: renderHtml }}
+            onClick={handlePreviewClick}
+          />
         ) : (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--faint)', fontSize: '14px' }}>
             还没有内容,点击右上角「编辑」开始写作
@@ -231,11 +254,15 @@ export default function EditorPage() {
         )
       )}
 
-      {/* 弱关联区 */}
       <div style={{ marginTop: '24px', paddingBottom: '40px' }}>
         <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--faint)', marginBottom: '6px' }}>关联概念</div>
         {isEditMode ? (
-          <WeakLinkEditor concepts={concepts} suggestions={allConcepts} onChange={(newConcepts) => { setConcepts(newConcepts); triggerSave('relatedConcepts', newConcepts) }} />
+          <>
+            <WeakLinkEditor concepts={concepts} suggestions={allConcepts} onChange={(newConcepts) => { setConcepts(newConcepts); triggerSave('relatedConcepts', newConcepts) }} />
+            <div style={{ fontSize: '12px', color: 'var(--faint)', marginTop: '8px' }}>
+              提示: 在内容中输入 <code style={{ background: 'var(--surface-2)', padding: '1px 4px', borderRadius: '3px' }}>[[笔记标题]]</code> 可以链接到其他笔记
+            </div>
+          </>
         ) : (
           concepts.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
