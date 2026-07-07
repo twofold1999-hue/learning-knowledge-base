@@ -1,21 +1,27 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useNoteStore } from '../stores/noteStore'
 import NoteCard from '../components/NoteCard'
+import { searchNotes, getAllIndexedNotes, initSearchIndex } from '../services/searchService'
+import type { Note } from '../types'
 
 export default function SearchPage() {
   const navigate = useNavigate()
-  const notes = useNoteStore((s) => s.notes)
-  const searchNotes = useNoteStore((s) => s.searchNotes)
-  const fetchNotes = useNoteStore((s) => s.fetchNotes)
   const [query, setQuery] = useState('')
+  const [notes, setNotes] = useState<Note[]>([])
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
-    if (query.trim()) {
-      searchNotes(query.trim())
-    } else {
-      fetchNotes()
-    }
+    let cancelled = false
+    initSearchIndex().then(() => {
+      if (cancelled) return
+      setIsReady(true)
+      if (query.trim()) {
+        setNotes(searchNotes(query))
+      } else {
+        setNotes(getAllIndexedNotes().slice(0, 20))
+      }
+    })
+    return () => { cancelled = true }
   }, [query])
 
   return (
@@ -37,10 +43,10 @@ export default function SearchPage() {
         )}
       </div>
       <div style={{ fontSize: '13px', color: 'var(--faint)', marginBottom: '16px' }}>
-        {query ? `找到 ${notes.length} 条结果` : `共 ${notes.length} 篇笔记`}
+        {!isReady ? '加载中...' : query ? `找到 ${notes.length} 条结果` : `共 ${getAllIndexedNotes().length} 篇笔记，显示最近 20 篇`}
       </div>
       {notes.map((note) => <NoteCard key={note.id} note={note} />)}
-      {notes.length === 0 && (
+      {isReady && notes.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px', color: 'var(--faint)', fontSize: '14px' }}>
           {query ? '没有找到匹配的笔记' : '还没有笔记'}
         </div>

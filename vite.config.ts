@@ -56,6 +56,7 @@ export default defineConfig({
             '@dnd-kit/utilities',
           ],
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'flexsearch': ['flexsearch'],
         },
       },
     },

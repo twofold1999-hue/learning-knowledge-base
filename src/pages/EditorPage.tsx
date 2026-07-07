@@ -115,9 +115,23 @@ export default function EditorPage() {
 
   if (showTypeDialog) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '32px', maxWidth: '400px', width: '90%' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '24px', color: 'var(--ink)' }}>选择笔记类型</h3>
+      <div
+        onClick={() => { setShowTypeDialog(false); navigate('/') }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => { if (e.key === 'Escape') { setShowTypeDialog(false); navigate('/') } }}
+          tabIndex={0}
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '32px', maxWidth: '400px', width: '90%', outline: 'none' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>选择笔记类型</h3>
+            <button
+              onClick={() => { setShowTypeDialog(false); navigate('/') }}
+              style={{ fontSize: '18px', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+            >✕</button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <button onClick={() => handleSelectType('knowledge_fragment')} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '8px', padding: '20px', color: 'var(--ink)', fontSize: '16px', fontWeight: 500, textAlign: 'left' }}>
               知识片段
@@ -127,6 +141,9 @@ export default function EditorPage() {
               课程章节
               <div style={{ fontSize: '13px', fontWeight: 400, color: 'var(--muted)' }}>视频/书籍课程的章节笔记</div>
             </button>
+          </div>
+          <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12px', color: 'var(--faint)' }}>
+            按 Esc 取消 · 点击外部关闭
           </div>
         </div>
       </div>
