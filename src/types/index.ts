@@ -23,6 +23,7 @@ export interface Project {
   description: string
   directoryId: string | null
   createdAt: string
+  updatedAt: string
 }
 
 export interface Course {
@@ -33,6 +34,7 @@ export interface Course {
   videoUrl: string | null
   directoryId: string | null
   createdAt: string
+  updatedAt: string
 }
 
 export interface NoteFilter {

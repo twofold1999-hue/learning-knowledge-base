@@ -3,9 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { marked } from 'marked'
 import { useNoteStore } from '../stores/noteStore'
 import { getImage } from '../services/imageService'
-import CodeMirrorEditor from '../components/CodeMirrorEditor'
+import { lazy, Suspense } from 'react'
 import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
+
+// 懒加载编辑器组件(CodeMirror 体积大,只在编辑模式时加载)
+const CodeMirrorEditor = lazy(() => import('../components/CodeMirrorEditor'))
 import type { NoteType } from '../types'
 
 export default function EditorPage() {
@@ -194,11 +197,13 @@ export default function EditorPage() {
 
       {/* 内容区 */}
       {isEditMode ? (
-        <CodeMirrorEditor
-          value={content}
-          onChange={(val) => { setContent(val); triggerSave('content', val) }}
-          onSave={() => { if (actualNoteId.current) updateNote(actualNoteId.current, { title, content, tags, relatedConcepts: concepts }) }}
-        />
+        <Suspense fallback={<div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>加载编辑器...</div>}>
+          <CodeMirrorEditor
+            value={content}
+            onChange={(val) => { setContent(val); triggerSave('content', val) }}
+            onSave={() => { if (actualNoteId.current) updateNote(actualNoteId.current, { title, content, tags, relatedConcepts: concepts }) }}
+          />
+        </Suspense>
       ) : (
         renderHtml ? (
           <div className="markdown-preview" dangerouslySetInnerHTML={{ __html: renderHtml }} />
