@@ -1,0 +1,17 @@
+:root { color-scheme: light; font-family: system-ui, -apple-system, "Microsoft YaHei", sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #f8fafc; color: #1f2937; }
+header { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+header strong, header span { display: block; }
+header span { margin-top: 3px; color: #64748b; font-size: 12px; }
+button { border: 0; border-radius: 6px; padding: 7px 9px; color: #fff; background: #3b82f6; cursor: pointer; white-space: nowrap; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+button.secondary { color: #2563eb; background: #eff6ff; }
+.header-actions { display: flex; gap: 6px; }
+.header-actions button { padding: 7px 8px; }
+#clip-tools { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+#clip-status { margin-bottom: 7px; color: #64748b; font-size: 12px; }
+#clip-tools input { width: 100%; margin-bottom: 7px; padding: 7px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; font-size: 13px; }
+#clip-tools div:last-child { display: flex; gap: 7px; }
+main { padding: 24px 16px; color: #64748b; line-height: 1.6; }
+iframe { width: 100%; flex: 1; border: 0; background: #fff; }

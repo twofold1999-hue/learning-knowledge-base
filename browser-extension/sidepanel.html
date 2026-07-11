@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>知识库学习笔记</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <strong>当前章节笔记</strong>
+        <span id="status">正在连接本地知识库…</span>
+      </div>
+      <div class="header-actions">
+        <button id="save-progress" type="button" class="secondary">保存进度</button>
+        <button id="record" type="button">插入单点</button>
+      </div>
+    </header>
+    <section id="clip-tools" hidden>
+      <div id="clip-status">可设定片段起点，再在结束处插入正文。</div>
+      <input id="annotation" type="text" maxlength="240" placeholder="旁注：如 xx 软件的安装过程" />
+      <div>
+        <button id="set-start" type="button" class="secondary">设为起点</button>
+        <button id="insert-clip" type="button">插入片段</button>
+      </div>
+    </section>
+    <main id="empty">请从知识库的课程章节点击「B站学习」。</main>
+    <iframe id="knowledge-base" title="知识库章节笔记" hidden></iframe>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

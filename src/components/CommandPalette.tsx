@@ -19,6 +19,7 @@ export default function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [indexedNotes, setIndexedNotes] = useState<Note[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -50,7 +51,9 @@ export default function CommandPalette() {
     if (isOpen) {
       setQuery('')
       setSelectedIndex(0)
-      initSearchIndex()
+      void initSearchIndex().then(() => setIndexedNotes(getAllIndexedNotes())).catch((error) => {
+        console.error('Failed to initialize search:', error)
+      })
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [isOpen])
@@ -63,20 +66,20 @@ export default function CommandPalette() {
       {
         id: 'action-new-fragment',
         category: '快速操作',
-        label: '新建知识片段',
-        subtitle: '创建一篇项目学习笔记',
+        label: '新建自由笔记',
+        subtitle: '记录知识点、练习心得或素材',
         icon: '📝',
         keywords: 'new create 新建 创建 片段',
-        action: () => { navigate('/editor/new'); close() },
+        action: () => { navigate('/editor/new?type=knowledge_fragment'); close() },
       },
       {
         id: 'action-new-chapter',
         category: '快速操作',
-        label: '新建课程章节',
-        subtitle: '创建一章课程笔记',
+        label: '新建学习单元',
+        subtitle: '记录课程、书籍或训练计划的一节',
         icon: '📚',
         keywords: 'new create 新建 创建 章节 课程',
-        action: () => { navigate('/editor/new'); close() },
+        action: () => { navigate('/editor/new?type=course_chapter'); close() },
       },
       {
         id: 'action-search',
@@ -120,28 +123,27 @@ export default function CommandPalette() {
     for (const p of projects) {
       items.push({
         id: 'project-' + p.id,
-        category: '项目',
+        category: '专题 / 项目',
         label: p.name,
         subtitle: p.description || '项目',
         icon: '📂',
         keywords: 'project 项目',
-        action: () => { navigate('/project/' + p.id); close() },
+        action: () => { navigate('/project/' + encodeURIComponent(p.id)); close() },
       })
     }
 
     for (const c of courses) {
       items.push({
         id: 'course-' + c.id,
-        category: '课程',
+        category: '学习计划',
         label: c.name + ' - ' + c.source,
         icon: '📖',
         keywords: 'course 课程',
-        action: () => { navigate('/course/' + c.id); close() },
+        action: () => { navigate('/course/' + encodeURIComponent(c.id)); close() },
       })
     }
 
-    const notes = getAllIndexedNotes()
-    for (const note of notes) {
+    for (const note of indexedNotes) {
       items.push({
         id: 'note-' + note.id,
         category: '笔记',
@@ -149,12 +151,12 @@ export default function CommandPalette() {
         subtitle: (note.type === 'knowledge_fragment' ? '片段' : '章节') + (note.tags.length > 0 ? ' · ' + note.tags.join(', ') : ''),
         icon: note.type === 'knowledge_fragment' ? '📝' : '📚',
         keywords: note.tags.join(' '),
-        action: () => { navigate('/editor/' + note.id); close() },
+        action: () => { navigate('/editor/' + encodeURIComponent(note.id)); close() },
       })
     }
 
     return items
-  }, [projects, courses, navigate, setTheme, close])
+  }, [projects, courses, indexedNotes, navigate, setTheme, close])
 
   // 过滤
   const filteredItems = useMemo(() => {

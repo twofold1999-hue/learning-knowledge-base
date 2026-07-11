@@ -1,10 +1,20 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { EditorState, EditorSelection } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
+import { saveImage } from '../services/imageService'
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('无法读取图片'))
+    reader.onerror = () => reject(reader.error ?? new Error('无法读取图片'))
+    reader.readAsDataURL(file)
+  })
+}
 
 interface Props {
   value: string
@@ -17,6 +27,7 @@ export default function CodeMirrorEditor({ value, onChange, onSave }: Props) {
   const viewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
   const onSaveRef = useRef(onSave)
+  const [imageError, setImageError] = useState<string | null>(null)
 
   // 保持 ref 最新
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
@@ -53,6 +64,35 @@ export default function CodeMirrorEditor({ value, onChange, onSave }: Props) {
           if (update.docChanged) {
             onChangeRef.current(update.state.doc.toString())
           }
+        }),
+        EditorView.domEventHandlers({
+          paste: (event, view) => {
+            const imageFiles = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith('image/'))
+            if (imageFiles.length === 0) return false
+            event.preventDefault()
+            setImageError(null)
+            void (async () => {
+              try {
+                const references: string[] = []
+                for (const file of imageFiles) {
+                  if (file.size > 12_000_000) throw new Error('单张图片不能超过 12 MB')
+                  const id = await saveImage(await readFileAsDataUrl(file))
+                  references.push(`![${file.name || '粘贴图片'}](${id})`)
+                }
+                if (viewRef.current !== view) return
+                const selection = view.state.selection.main
+                const insert = references.join('\n\n')
+                view.dispatch({
+                  changes: { from: selection.from, to: selection.to, insert },
+                  selection: { anchor: selection.from + insert.length },
+                })
+                view.focus()
+              } catch (error) {
+                setImageError(error instanceof Error ? error.message : '图片粘贴失败')
+              }
+            })()
+            return true
+          },
         }),
       ],
     })
@@ -186,6 +226,11 @@ export default function CodeMirrorEditor({ value, onChange, onSave }: Props) {
 
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+      {imageError && (
+        <div role="alert" style={{ padding: '8px 12px', background: 'rgba(247,118,142,0.12)', color: 'var(--red)', fontSize: '13px' }}>
+          {imageError}
+        </div>
+      )}
       {/* 工具栏 */}
       <div
         style={{

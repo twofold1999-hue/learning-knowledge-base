@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -12,6 +15,7 @@ export default defineConfig({
         name: '外部知识库',
         short_name: '知识库',
         description: '个人外部知识库 - 笔记管理与学习记录',
+        lang: 'zh-CN',
         theme_color: '#1a1b26',
         background_color: '#1a1b26',
         display: 'standalone',
@@ -24,44 +28,23 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-        ],
+        // PDF generator is loaded only when exporting; keep regular launches
+        // lean instead of forcing it into the offline precache.
+        globIgnores: ['**/assets/html2pdf-*.js'],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
       },
     }),
   ],
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'codemirror': [
-            '@codemirror/commands',
-            '@codemirror/lang-markdown',
-            '@codemirror/language',
-            '@codemirror/search',
-            '@codemirror/state',
-            '@codemirror/view',
-            'codemirror',
-          ],
-          'dnd-kit': [
-            '@dnd-kit/core',
-            '@dnd-kit/sortable',
-            '@dnd-kit/utilities',
-          ],
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'flexsearch': ['flexsearch'],
-        },
-      },
-    },
+    // CodeMirror is isolated behind a lazy editor boundary; keep warnings for any larger chunk.
+    chunkSizeWarningLimit: 550,
   },
   server: {
     port: 5173,
+    watch: {
+      ignored: ['**/src-tauri/**'],
+    },
   },
 })

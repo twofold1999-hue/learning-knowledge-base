@@ -2,8 +2,9 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useNavigate } from 'react-router-dom'
 import type { Note } from '../types'
+import { isLearned } from '../utils/noteUtils'
 
-export default function SortableNoteCard({ note }: { note: Note }) {
+export default function SortableNoteCard({ note, onToggleLearned }: { note: Note; onToggleLearned?: (note: Note) => void }) {
   const navigate = useNavigate()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: note.id })
 
@@ -19,6 +20,7 @@ export default function SortableNoteCard({ note }: { note: Note }) {
     .replace(/[#*`~>_\-]/g, '')
     .replace(/\n+/g, ' ')
     .slice(0, 100)
+  const learned = isLearned(note.content)
 
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime()
@@ -46,6 +48,16 @@ export default function SortableNoteCard({ note }: { note: Note }) {
       {...listeners}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+        {onToggleLearned && (
+          <button
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => { event.stopPropagation(); onToggleLearned(note) }}
+            title={learned ? '标记为未学' : '标记为已学'}
+            style={{ width: '22px', height: '22px', borderRadius: '50%', border: `2px solid ${learned ? 'var(--green)' : 'var(--faint)'}`, background: learned ? 'var(--green)' : 'transparent', color: '#fff', fontSize: '13px', cursor: 'pointer', padding: 0 }}
+          >
+            {learned ? '✓' : ''}
+          </button>
+        )}
         <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, background: note.type === 'knowledge_fragment' ? 'rgba(158,206,106,0.15)' : 'rgba(187,154,247,0.15)', color: note.type === 'knowledge_fragment' ? 'var(--green)' : 'var(--purple)' }}>
           {note.type === 'knowledge_fragment' ? '片段' : '章节'}
         </span>
