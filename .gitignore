@@ -4,3 +4,7 @@ dist
 .DS_Store
 playwright-report/
 test-results/
+.env
+.env.*
+!.env.example
+src-tauri/target/

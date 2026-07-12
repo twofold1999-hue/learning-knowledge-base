@@ -15,6 +15,7 @@ const SearchPage = lazy(() => import('./pages/SearchPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const HeatmapPage = lazy(() => import('./pages/HeatmapPage'))
 const GraphPage = lazy(() => import('./pages/GraphPage'))
+const KnowledgeEntityPage = lazy(() => import('./pages/KnowledgeEntityPage'))
 
 export default function App() {
   const initTheme = useUiStore((s) => s.initTheme)
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/search" element={<SearchPage />} />
           <Route path="/heatmap" element={<HeatmapPage />} />
           <Route path="/graph" element={<GraphPage />} />
+          <Route path="/knowledge/entities/:entityId" element={<KnowledgeEntityPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Suspense>

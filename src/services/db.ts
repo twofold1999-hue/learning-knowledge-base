@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { AppSetting, DeletedNote, Note, Project, Course, Directory, ImageRecord } from '../types'
+import type { AIResult, AppSetting, DeletedNote, Note, Project, Course, Directory, ImageRecord, KnowledgeEntity, NoteEntityLink, KnowledgeRelation, KnowledgeAuditLog } from '../types'
 import {
   normalizeCourseRecord,
   normalizeDirectoryRecord,
@@ -16,6 +16,11 @@ export class AppDatabase extends Dexie {
   directories!: Table<Directory, string>
   deletedNotes!: Table<DeletedNote, string>
   settings!: Table<AppSetting, string>
+  aiResults!: Table<AIResult, string>
+  knowledgeEntities!: Table<KnowledgeEntity, string>
+  noteEntityLinks!: Table<NoteEntityLink, string>
+  knowledgeRelations!: Table<KnowledgeRelation, string>
+  knowledgeAuditLogs!: Table<KnowledgeAuditLog, string>
 
   constructor() {
     super('LearningKnowledgeBase')
@@ -104,9 +109,71 @@ export class AppDatabase extends Dexie {
         note.mediaUrl ??= null
       })
     })
+    this.version(7).stores({
+      notes: 'id, type, projectId, courseId, directoryId, createdAt, updatedAt, *tags',
+      deletedNotes: 'id, deletedAt, deletionReason',
+      projects: 'id, name',
+      courses: 'id, name',
+      images: 'id, createdAt',
+      directories: 'id, name',
+      settings: 'key, updatedAt',
+      aiResults: 'id, noteId, type, status, createdAt, updatedAt, [noteId+type]',
+    })
+    this.version(8).stores({
+      notes: 'id, type, projectId, courseId, directoryId, createdAt, updatedAt, *tags',
+      deletedNotes: 'id, deletedAt, deletionReason',
+      projects: 'id, name',
+      courses: 'id, name',
+      images: 'id, createdAt',
+      directories: 'id, name',
+      settings: 'key, updatedAt',
+      aiResults: 'id, noteId, type, status, createdAt, updatedAt, [noteId+type]',
+      knowledgeEntities: 'id, canonicalName, type, status, createdAt, updatedAt, *aliases',
+      noteEntityLinks: 'id, noteId, entityId, role, source, createdAt, updatedAt, [noteId+entityId]',
+    })
+    this.version(9).stores({
+      notes: 'id, type, projectId, courseId, directoryId, createdAt, updatedAt, *tags',
+      deletedNotes: 'id, deletedAt, deletionReason',
+      projects: 'id, name',
+      courses: 'id, name',
+      images: 'id, createdAt',
+      directories: 'id, name',
+      settings: 'key, updatedAt',
+      aiResults: 'id, noteId, type, status, createdAt, updatedAt, [noteId+type]',
+      knowledgeEntities: 'id, canonicalName, type, status, createdAt, updatedAt, *aliases',
+      noteEntityLinks: 'id, noteId, entityId, role, source, createdAt, updatedAt, [noteId+entityId]',
+      knowledgeRelations: 'id, fromEntityId, toEntityId, relationType, status, source, createdAt, updatedAt, [fromEntityId+toEntityId+relationType]',
+    })
+    this.version(10).stores({
+      notes: 'id, type, projectId, courseId, directoryId, createdAt, updatedAt, *tags',
+      deletedNotes: 'id, deletedAt, deletionReason',
+      projects: 'id, name',
+      courses: 'id, name',
+      images: 'id, createdAt',
+      directories: 'id, name',
+      settings: 'key, updatedAt',
+      aiResults: 'id, noteId, type, status, createdAt, updatedAt, [noteId+type]',
+      knowledgeEntities: 'id, canonicalName, type, status, createdAt, updatedAt, *aliases',
+      noteEntityLinks: 'id, noteId, entityId, role, source, createdAt, updatedAt, [noteId+entityId]',
+      knowledgeRelations: 'id, fromEntityId, toEntityId, relationType, status, source, createdAt, updatedAt, [fromEntityId+toEntityId+relationType]',
+      knowledgeAuditLogs: 'id, targetType, targetId, action, source, aiResultId, noteId, createdAt, [targetType+targetId]',
+    })
+    this.version(11).stores({
+      notes: 'id, type, projectId, courseId, directoryId, createdAt, updatedAt, *tags',
+      deletedNotes: 'id, deletedAt, deletionReason',
+      projects: 'id, name',
+      courses: 'id, name',
+      images: 'id, createdAt',
+      directories: 'id, name',
+      settings: 'key, updatedAt',
+      aiResults: 'id, noteId, type, status, createdAt, updatedAt, [noteId+type]',
+      knowledgeEntities: 'id, canonicalName, type, status, createdAt, updatedAt, *aliases',
+      noteEntityLinks: 'id, noteId, entityId, role, source, createdAt, updatedAt, [noteId+entityId]',
+      knowledgeRelations: 'id, fromEntityId, toEntityId, relationType, status, source, evidenceNoteId, createdAt, updatedAt, [fromEntityId+toEntityId+relationType]',
+      knowledgeAuditLogs: 'id, targetType, targetId, action, source, aiResultId, noteId, createdAt, [targetType+targetId]',
+    })
   }
 }
-
 export const db = new AppDatabase()
 
 export function generateId(prefix: string): string {

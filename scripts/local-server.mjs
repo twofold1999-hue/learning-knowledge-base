@@ -1,12 +1,16 @@
 import { createServer } from 'node:http'
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { basename, extname, resolve } from 'node:path'
+import { basename, dirname, extname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { AI_PROXY_PATH, createAIProxyHandler, getServerAIConfig } from './local-ai-proxy.mjs'
 import { spawn } from 'node:child_process'
 
 const host = '127.0.0.1'
 const port = 4173
-const distDirectory = resolve(process.cwd(), 'dist')
-const mediaDirectory = resolve(process.cwd(), 'media')
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const distDirectory = resolve(projectRoot, 'dist')
+const mediaDirectory = resolve(projectRoot, 'media')
+const aiProxyHandler = createAIProxyHandler({ configProvider: () => getServerAIConfig(projectRoot) })
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -29,6 +33,7 @@ if (!existsSync(distDirectory)) {
 }
 
 function openBrowser(url) {
+  if (process.env.KNOWLEDGE_BASE_NO_OPEN === '1') return
   if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref()
   else if (process.platform === 'darwin') spawn('open', [url], { detached: true, stdio: 'ignore' }).unref()
   else spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref()
@@ -37,6 +42,7 @@ function openBrowser(url) {
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://${host}:${port}`)
   const requestedPath = decodeURIComponent(url.pathname)
+  if (requestedPath === AI_PROXY_PATH) { void aiProxyHandler(request, response); return }
   const filePath = resolve(distDirectory, `.${requestedPath}`)
   const mediaPath = resolve(mediaDirectory, `.${requestedPath.slice('/media'.length)}`)
   const isInsideDist = filePath === distDirectory || filePath.startsWith(`${distDirectory}\\`)
@@ -68,6 +74,7 @@ const server = createServer((request, response) => {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
     'Cross-Origin-Opener-Policy': 'same-origin',
+    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; frame-src https://player.bilibili.com https://www.bilibili.com; worker-src 'self' blob:; font-src 'self' data:; manifest-src 'self';",
   }
 
   // Browser video players rely on HTTP range requests for fast seeking and resume playback.

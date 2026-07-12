@@ -12,6 +12,9 @@ import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
 import Outline from '../components/Outline'
 import VideoPanel from '../components/VideoPanel'
+import AINoteOrganizer from '../components/AINoteOrganizer'
+import AIKnowledgeAnalyzer from '../components/AIKnowledgeAnalyzer'
+import KnowledgeOverviewPanel from '../components/KnowledgeOverviewPanel'
 import { formatVideoTimestamp, isBilibiliVideoUrl, openBilibiliStudy } from '../services/biliStudyBridge'
 import { getTagColor } from '../utils/tagColors'
 import type { NoteType, NoteUpdate } from '../types'
@@ -43,6 +46,7 @@ export default function EditorPage() {
   const projects = useProjectStore((s) => s.projects)
   const courses = useProjectStore((s) => s.courses)
 
+  const [knowledgeOverviewVersion, setKnowledgeOverviewVersion] = useState(0)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -552,7 +556,11 @@ export default function EditorPage() {
       </div>
 
       {isEditMode ? (
-        <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
+        <>
+          {currentNote && <AIKnowledgeAnalyzer content={content} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} />}
+          {currentNote && <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />}
+          <AINoteOrganizer content={content} noteId={currentNote?.id} onApply={(nextContent) => { setContent(nextContent); triggerSave({ content: nextContent }) }} />
+          <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
           <CodeMirrorEditor
             value={content}
             onChange={(val) => { setContent(val); triggerSave({ content: val }) }}
@@ -561,7 +569,8 @@ export default function EditorPage() {
               void trackFlush().catch(() => undefined)
             }}
           />
-        </Suspense>
+          </Suspense>
+        </>
       ) : (
         renderHtml ? (
           <div

@@ -27,6 +27,10 @@ describe('parseBackupJson', () => {
       tags: ['TypeScript'],
       relatedConcepts: [],
     })
+    expect(data.aiResults).toEqual([])
+    expect(data.knowledgeEntities).toEqual([])
+    expect(data.noteEntityLinks).toEqual([])
+    expect(data.knowledgeRelations).toEqual([])
   })
 
   it('拒绝重复 ID，避免 bulkPut 静默覆盖', () => {
@@ -39,5 +43,14 @@ describe('parseBackupJson', () => {
     expect(() => parseBackupJson(JSON.stringify({
       images: [{ id: 'img_1', data: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=', createdAt: now }],
     }))).toThrow('安全图片')
+  })
+  it('接受 knowledge_candidates 类型的 AIResult，以支持 Backup v4 恢复', () => {
+    const data = parseBackupJson(JSON.stringify({
+      format: 'learning-knowledge-base', version: 4, data: {
+        notes: [], deletedNotes: [], projects: [], courses: [], directories: [], images: [], knowledgeEntities: [], noteEntityLinks: [], knowledgeRelations: [],
+        aiResults: [{ id: 'ai_candidates', noteId: 'note_1', type: 'knowledge_candidates', status: 'generated', payload: { entities: [], relations: [] }, sourceContentHash: 'hash', model: 'test-model', createdAt: now, updatedAt: now }],
+      },
+    }))
+    expect(data.aiResults).toEqual([expect.objectContaining({ type: 'knowledge_candidates' })])
   })
 })

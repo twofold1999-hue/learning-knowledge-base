@@ -1,4 +1,4 @@
-import type { Course, DeletedNote, Directory, ImageRecord, Note, Project, TrashReason } from '../types'
+import type { AIResult, Course, DeletedNote, Directory, ImageRecord, KnowledgeEntity, KnowledgeRelation, Note, NoteEntityLink, Project, TrashReason } from '../types'
 
 const MAX_TITLE_LENGTH = 10_000
 const MAX_CONTENT_LENGTH = 5_000_000
@@ -15,6 +15,10 @@ export interface BackupData {
   courses: Course[]
   directories: Directory[]
   images: ImageRecord[]
+  aiResults: AIResult[]
+  knowledgeEntities: KnowledgeEntity[]
+  noteEntityLinks: NoteEntityLink[]
+  knowledgeRelations: KnowledgeRelation[]
 }
 
 function asRecord(value: unknown, label: string): UnknownRecord {
@@ -185,6 +189,124 @@ export function normalizeImageRecord(value: unknown, index = 0): ImageRecord {
   }
 }
 
+function jsonPayload(value: unknown, label: string): unknown {
+  if (value === undefined) throw new Error(`${label} 不能为空`)
+  try {
+    const serialized = JSON.stringify(value)
+    if (serialized === undefined || serialized.length > MAX_CONTENT_LENGTH) throw new Error()
+    return JSON.parse(serialized) as unknown
+  } catch {
+    throw new Error(`${label} 必须是可序列化 JSON`)
+  }
+}
+
+function normalizeAIResultRecord(value: unknown, index = 0): AIResult {
+  const record = asRecord(value, `aiResults[${index}]`)
+  const type = record.type
+  if (type !== 'summary' && type !== 'metadata' && type !== 'knowledge_candidates') throw new Error(`aiResults[${index}].type 无效`)
+  const status = record.status
+  if (status !== 'generated' && status !== 'applied' && status !== 'discarded' && status !== 'stale' && status !== 'failed') {
+    throw new Error(`aiResults[${index}].status 无效`)
+  }
+  const createdAt = isoDate(record.createdAt, `aiResults[${index}].createdAt`)
+  const appliedAt = record.appliedAt === undefined || record.appliedAt === null
+    ? undefined
+    : isoDate(record.appliedAt, `aiResults[${index}].appliedAt`)
+  return {
+    id: requiredString(record.id, `aiResults[${index}].id`, MAX_TITLE_LENGTH),
+    noteId: requiredString(record.noteId, `aiResults[${index}].noteId`, MAX_TITLE_LENGTH),
+    type,
+    status,
+    payload: jsonPayload(record.payload, `aiResults[${index}].payload`),
+    sourceContentHash: requiredString(record.sourceContentHash, `aiResults[${index}].sourceContentHash`, MAX_TITLE_LENGTH),
+    model: requiredString(record.model, `aiResults[${index}].model`, MAX_TITLE_LENGTH),
+    ...(appliedAt ? { appliedAt } : {}),
+    createdAt,
+    updatedAt: isoDate(record.updatedAt, `aiResults[${index}].updatedAt`, createdAt),
+  }
+}
+function confidence(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`${label} 必须是 0 到 1 之间的数字`)
+  }
+  return value
+}
+
+function normalizeKnowledgeEntityRecord(value: unknown, index = 0): KnowledgeEntity {
+  const record = asRecord(value, `knowledgeEntities[${index}]`)
+  const type = record.type
+  if (type !== 'concept' && type !== 'topic' && type !== 'tool' && type !== 'method' && type !== 'person' && type !== 'term') {
+    throw new Error(`knowledgeEntities[${index}].type 无效`)
+  }
+  const status = record.status
+  if (status !== 'suggested' && status !== 'approved' && status !== 'rejected') {
+    throw new Error(`knowledgeEntities[${index}].status 无效`)
+  }
+  const createdAt = isoDate(record.createdAt, `knowledgeEntities[${index}].createdAt`)
+  return {
+    id: requiredString(record.id, `knowledgeEntities[${index}].id`, MAX_TITLE_LENGTH),
+    canonicalName: requiredString(record.canonicalName, `knowledgeEntities[${index}].canonicalName`, MAX_TITLE_LENGTH),
+    aliases: stringList(record.aliases, `knowledgeEntities[${index}].aliases`),
+    type,
+    status,
+    description: optionalString(record.description, `knowledgeEntities[${index}].description`),
+    createdAt,
+    updatedAt: isoDate(record.updatedAt, `knowledgeEntities[${index}].updatedAt`, createdAt),
+  }
+}
+
+function normalizeNoteEntityLinkRecord(value: unknown, index = 0): NoteEntityLink {
+  const record = asRecord(value, `noteEntityLinks[${index}]`)
+  const role = record.role
+  if (role !== 'defines' && role !== 'mentions' && role !== 'example' && role !== 'prerequisite') {
+    throw new Error(`noteEntityLinks[${index}].role 无效`)
+  }
+  const source = record.source
+  if (source !== 'manual' && source !== 'ai' && source !== 'migration') {
+    throw new Error(`noteEntityLinks[${index}].source 无效`)
+  }
+  const createdAt = isoDate(record.createdAt, `noteEntityLinks[${index}].createdAt`)
+  return {
+    id: requiredString(record.id, `noteEntityLinks[${index}].id`, MAX_TITLE_LENGTH),
+    noteId: requiredString(record.noteId, `noteEntityLinks[${index}].noteId`, MAX_TITLE_LENGTH),
+    entityId: requiredString(record.entityId, `noteEntityLinks[${index}].entityId`, MAX_TITLE_LENGTH),
+    role,
+    confidence: confidence(record.confidence, `noteEntityLinks[${index}].confidence`),
+    source,
+    createdAt,
+    updatedAt: isoDate(record.updatedAt, `noteEntityLinks[${index}].updatedAt`, createdAt),
+  }
+}
+
+function normalizeKnowledgeRelationRecord(value: unknown, index = 0): KnowledgeRelation {
+  const record = asRecord(value, `knowledgeRelations[${index}]`)
+  const relationType = record.relationType
+  if (relationType !== 'related_to' && relationType !== 'depends_on' && relationType !== 'contains' && relationType !== 'explains' && relationType !== 'contrasts_with' && relationType !== 'prerequisite') {
+    throw new Error(`knowledgeRelations[${index}].relationType 无效`)
+  }
+  const status = record.status
+  if (status !== 'suggested' && status !== 'approved' && status !== 'rejected') {
+    throw new Error(`knowledgeRelations[${index}].status 无效`)
+  }
+  const source = record.source
+  if (source !== 'manual' && source !== 'ai' && source !== 'migration') {
+    throw new Error(`knowledgeRelations[${index}].source 无效`)
+  }
+  const createdAt = isoDate(record.createdAt, `knowledgeRelations[${index}].createdAt`)
+  return {
+    id: requiredString(record.id, `knowledgeRelations[${index}].id`, MAX_TITLE_LENGTH),
+    fromEntityId: requiredString(record.fromEntityId, `knowledgeRelations[${index}].fromEntityId`, MAX_TITLE_LENGTH),
+    toEntityId: requiredString(record.toEntityId, `knowledgeRelations[${index}].toEntityId`, MAX_TITLE_LENGTH),
+    relationType,
+    status,
+    confidence: confidence(record.confidence, `knowledgeRelations[${index}].confidence`),
+    source,
+    aiResultId: nullableString(record.aiResultId, `knowledgeRelations[${index}].aiResultId`),
+    evidenceNoteId: nullableString(record.evidenceNoteId, `knowledgeRelations[${index}].evidenceNoteId`),
+    createdAt,
+    updatedAt: isoDate(record.updatedAt, `knowledgeRelations[${index}].updatedAt`, createdAt),
+  }
+}
 export function parseBackupJson(text: string): BackupData {
   if (text.length > 100_000_000) throw new Error('备份文件超过 100 MB 限制')
   let parsed: unknown
@@ -194,11 +316,11 @@ export function parseBackupJson(text: string): BackupData {
     throw new Error('备份文件不是有效 JSON')
   }
   const envelope = asRecord(parsed, '备份文件')
-  if (envelope.format === 'learning-knowledge-base' && envelope.version !== 1 && envelope.version !== 2) {
+  if (envelope.format === 'learning-knowledge-base' && envelope.version !== 1 && envelope.version !== 2 && envelope.version !== 3 && envelope.version !== 4) {
     throw new Error(`不支持的备份版本：${String(envelope.version)}`)
   }
   const rawData = envelope.format === 'learning-knowledge-base' ? asRecord(envelope.data, 'data') : envelope
-  const hasKnownField = ['notes', 'deletedNotes', 'projects', 'courses', 'directories', 'images'].some((key) => key in rawData)
+  const hasKnownField = ['notes', 'deletedNotes', 'projects', 'courses', 'directories', 'images', 'aiResults', 'knowledgeEntities', 'noteEntityLinks', 'knowledgeRelations'].some((key) => key in rawData)
   if (!hasKnownField) throw new Error('备份文件不包含可识别的数据表')
 
   return {
@@ -208,5 +330,9 @@ export function parseBackupJson(text: string): BackupData {
     courses: ensureUniqueIds(recordArray(rawData.courses, 'courses', normalizeCourseRecord), 'courses'),
     directories: ensureUniqueIds(recordArray(rawData.directories, 'directories', normalizeDirectoryRecord), 'directories'),
     images: ensureUniqueIds(recordArray(rawData.images, 'images', normalizeImageRecord), 'images'),
+    aiResults: ensureUniqueIds(recordArray(rawData.aiResults, 'aiResults', normalizeAIResultRecord), 'aiResults'),
+    knowledgeEntities: ensureUniqueIds(recordArray(rawData.knowledgeEntities, 'knowledgeEntities', normalizeKnowledgeEntityRecord), 'knowledgeEntities'),
+    noteEntityLinks: ensureUniqueIds(recordArray(rawData.noteEntityLinks, 'noteEntityLinks', normalizeNoteEntityLinkRecord), 'noteEntityLinks'),
+    knowledgeRelations: ensureUniqueIds(recordArray(rawData.knowledgeRelations, 'knowledgeRelations', normalizeKnowledgeRelationRecord), 'knowledgeRelations'),
   }
 }
