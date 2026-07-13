@@ -82,6 +82,13 @@ export const FORCE_LAYOUT_ITERATIONS = 180
 Builder 的输入节点已稳定排序。布局前复制节点和边，避免 d3-force 的可变对象污染业务输入。空图返回空结果；单节点返回 `{ x: 0, y: 0 }`；多节点使用 `forceSimulation`、`forceLink`、`forceManyBody`、`forceCenter`、`forceCollide`，立即 `stop()` 后手动精确执行 180 次 `tick()`。输出前验证所有坐标为有限数字。布局不注册持续 tick 监听器、不启动动画、不重新加热、不写坐标进 Dexie 或备份。
 
 每个快照/筛选组合都拥有递增 request ID。旧布局结果、旧数据库读取结果或卸载后的完成结果不得更新当前 state。首版不实现 Worker、WASM 或后台服务；只有真实测量证明有限同步布局仍卡顿，才单独设计替代方案。
+## Repository Test and Import Contracts
+
+- Physical type declarations are in `src/types/index.ts`. Production source may follow the existing directory import style, for example `import type { KnowledgeEntity } from '../../../types'`; plan references to physical files use `src/types/index.ts`.
+- `package.json` has neither a React Testing Library package nor a Jest DOM matcher package. Component/page tests use the existing `createRoot`, `act`, DOM `querySelector`, dispatched `MouseEvent`, and `MemoryRouter` pattern. Do not repeat per-file environment comments because Vitest configuration is global.
+- `vitest.config.ts`, not `vite.config.ts`, provides `environment: 'jsdom'`; `src/test/setup.ts` imports `fake-indexeddb/auto`. Dexie tests reuse shared `db` and clear their own tables in `beforeEach`, rather than create a parallel application database.
+- The existing note graph only applies `trim()` to a wiki-link target. It applies `toLocaleLowerCase()` to titles without trim. Extraction must preserve that asymmetry.
+- Existing note graph `node.data` is exactly `{ label, noteType }`; degree remains derived layout data and must not be added to node data.
 
 ### Task 1: Isolate the Existing Note Graph Without Behavior Changes
 
@@ -93,12 +100,12 @@ Files:
 - Test: `src/features/graph/note-graph/buildNoteGraph.test.ts`
 
 Interfaces:
-- Consumes: `Note` from `src/types.ts`, current `useNoteStore`, React Flow v11 types and the existing visual tokens.
+- Consumes: `Note` from `src/types/index.ts`, current `useNoteStore`, React Flow v11 types and the existing visual tokens.
 - Produces: `buildNoteGraph(notes: Note[], filterTag: string): NoteGraphModel` and a `NoteGraphView` with unchanged note-graph behavior.
 
 - [ ] **Step 1: Write concrete failing pure-builder tests.**
 
-  Use fixed notes to assert tag filtering, trimmed/case-insensitive `[[title]]` lookup, self-link removal, reciprocal-edge de-duplication, degree-based radial distance, `无标题` fallback, and fragment/chapter data preservation.
+  Use fixed notes to assert tag filtering; case-insensitive lookup where only the wiki-link target is trimmed; a whitespace-padded title does not match an unpadded target; self-link removal; reciprocal-edge de-duplication; degree-based radial distance; `无标题` fallback; and node data equal to only `{ label, noteType }` for fragments and chapters.
 
   ```ts
   expect(buildNoteGraph(notes, '').edges.map((edge) => edge.id)).toEqual(['note_a:note_b'])
@@ -156,12 +163,12 @@ Files:
 - Test: `src/features/graph/entity-graph/entityGraphService.test.ts`
 
 Interfaces:
-- Consumes: `db` from `src/services/db.ts`; `KnowledgeEntity`, `KnowledgeEntityType`, `KnowledgeRelation`, `KnowledgeRelationType` from `src/types.ts`.
+- Consumes: `db` from `src/services/db.ts`; `KnowledgeEntity`, `KnowledgeEntityType`, `KnowledgeRelation`, `KnowledgeRelationType` from `src/types/index.ts`.
 - Produces: `EntityGraphSnapshot`, `EntityGraphFilters`, `EntityGraphService`, `entityGraphService`, `ENTITY_GRAPH_NODE_LIMIT`, `FORCE_LAYOUT_ITERATIONS`.
 
 - [ ] **Step 1: Write failing fake-indexeddb service tests.**
 
-  Seed approved, suggested and rejected records. Assert only approved records return, an approved orphan returns, empty database returns two empty arrays, an injected read error rejects, and no `put/add/update/delete` is called.
+  In `beforeEach`, clear `db.knowledgeEntities` and `db.knowledgeRelations` with `Promise.all`, then seed approved, suggested and rejected records. Assert only approved records return, an approved orphan returns, empty database returns two empty arrays, an injected read error rejects, and no `put/add/update/delete` is called. Reuse `src/test/setup.ts` fake IndexedDB initialization; do not instantiate a second application database.
 
   ```ts
   await expect(service.readApprovedSnapshot()).resolves.toEqual({ entities: [approvedEntity], relations: [approvedRelation] })
@@ -267,7 +274,7 @@ Interfaces:
 
 - [ ] **Step 4: Implement the pure rule order.**
 
-  Defensively retain only approved entities/relations; normalize name input with `trim().toLocaleLowerCase()`; search canonical names and aliases; apply entity type; retain orphans; validate endpoints; apply relation type only to edges; count remaining edges; sort by count/name/ID; take `maxNodes ?? ENTITY_GRAPH_NODE_LIMIT`; remove cut endpoints' edges. Never import Dexie, a service, React Flow or layout.
+  Defensively retain only approved entities/relations. For the entity graph only, compare `query.trim().toLowerCase()` with `canonicalName.trim().toLowerCase()` and each `alias.trim().toLowerCase()`; do not extract a shared normalization utility and do not alter Task 1 note-graph normalization. Apply entity type; retain orphans; validate endpoints; apply relation type only to edges; count remaining edges; sort by count/name/ID; take `maxNodes ?? ENTITY_GRAPH_NODE_LIMIT`; remove cut endpoints' edges. Never import Dexie, a service, React Flow or layout.
 
   ```ts
   const ordered = [...entities].sort((a, b) =>
@@ -340,7 +347,7 @@ Interfaces:
 
   ```ts
   export interface EntityGraphLayoutNode extends EntityGraphBusinessNode { position: { x: number; y: number } }
-  export interface EntityGraphLayoutEdge extends EntityGraphBusinessEdge {}
+  export type EntityGraphLayoutEdge = EntityGraphBusinessEdge
   export interface EntityGraphLayoutResult { nodes: EntityGraphLayoutNode[]; edges: EntityGraphLayoutEdge[] }
   export interface EntityGraphLayoutAdapter { layout(input: EntityGraphBuildResult): Promise<EntityGraphLayoutResult> }
   
@@ -348,7 +355,7 @@ Interfaces:
   for (let iteration = 0; iteration < FORCE_LAYOUT_ITERATIONS; iteration += 1) simulation.tick()
   ```
 
-  Clone business nodes/edges, deterministically initialize copies by stable index, reject input above 300, create all five required forces, stop immediately, tick exactly 180 times and validate finite coordinates. Do not add listeners, animation, coordinate persistence or drag reheat.
+  Clone business nodes/edges, deterministically initialize copies by stable index, reject input above 300, create all five required forces, stop immediately, tick exactly 180 times and validate finite coordinates. Return copied `EntityGraphLayoutEdge` values; do not add marker, label or React Flow style fields to layout edges, and do not mutate business input. Do not add listeners, animation, coordinate persistence or drag reheat.
 
 - [ ] **Step 5: Run focused adapter tests after implementation.**
 
@@ -379,11 +386,11 @@ Files:
 
 Interfaces:
 - Consumes: injected `EntityGraphService`, `buildEntityGraph`, `EntityGraphLayoutAdapter`, React Flow v11 and React Router.
-- Produces: `EntityGraphView` accepting optional injected `service`, `builder`, `layoutAdapter`; `EntityGraphNode`; no write API.
+- Produces: default-exported `EntityGraphView` accepting optional injected `service`, `builder`, `layoutAdapter`; `EntityGraphNode`; no write API.
 
 - [ ] **Step 1: Write failing view tests with fake service/builder/layout injection.**
 
-  Cover loading, retryable error, approved-empty, filtered-empty and clear filters, truncated notice, query/type/relation controls, node name/type/direct count, hover adjacency dimming, directed arrows, symmetric non-direction emphasis, stable detail route navigation, no writes and an older layout result losing to a newer request.
+  Cover loading, retryable error, approved-empty, filtered-empty and clear filters, truncated notice, query/type/relation controls, node name/type/direct count, hover adjacency dimming, `MarkerType.ArrowClosed` only for directed relations, no markerStart/markerEnd for symmetric relations, Chinese relation labels, stable detail route navigation, no writes and an older layout result losing to a newer request.
 
   ```tsx
   expect(service.readApprovedSnapshot).toHaveBeenCalledTimes(1)
@@ -398,9 +405,27 @@ Interfaces:
 
   Expected: FAIL because the view components do not exist.
 
-- [ ] **Step 3: Implement `EntityGraphNode` and stable React Flow mapping.**
+- [ ] **Step 3: Implement the default-export view contract and stable React Flow mapping.**
 
-  Render canonical name, localized type and direct connection count only. Map `depends_on`/`contains`/`explains`/`prerequisite` to arrows; map `related_to`/`contrasts_with` to symmetric labels/markers. Do not render descriptions, aliases, audit histories, AI payloads or linked-note detail.
+  ```tsx
+  export interface EntityGraphViewProps {
+    service?: EntityGraphService
+    builder?: typeof buildEntityGraph
+    layoutAdapter?: EntityGraphLayoutAdapter
+  }
+
+  export default function EntityGraphView(
+    props: EntityGraphViewProps,
+  ): JSX.Element {
+    const service = props.service ?? entityGraphService
+    const builder = props.builder ?? buildEntityGraph
+    const layoutAdapter = props.layoutAdapter ?? forceLayoutAdapter
+    void service; void builder; void layoutAdapter
+    return <section aria-label="实体图谱" />
+  }
+  ```
+
+  `EntityGraphNode` renders canonical name, localized type and direct connection count only. Import `MarkerType` from current React Flow v11. `depends_on`, `contains`, `explains` and `prerequisite` set only `markerEnd: { type: MarkerType.ArrowClosed }`. `related_to` and `contrasts_with` set neither `markerStart` nor `markerEnd`, never render double arrows, may render a Chinese relation label, and do not emphasize persisted `from/to` storage direction. Do not render descriptions, aliases, audit histories, AI payloads or linked-note detail. The default export is the exact target of Task 6 `React.lazy(() => import('../features/graph/entity-graph/EntityGraphView'))`.
 
 - [ ] **Step 4: Implement local state, readonly loading and stale-result protection.**
 
@@ -445,12 +470,16 @@ Interfaces:
 
 - [ ] **Step 1: Write failing GraphPage integration tests.**
 
-  Mock child feature views at their module boundaries. Assert default note mode, no entity snapshot call before selecting the entity mode, lazy fallback while loading, switch back preserving note view, and remount resetting to notes. Assert an entity-view error does not remove the mode controls.
+  Mock child feature modules at their boundaries with `vi.mock`. Follow the existing component-test setup: create a container, render `GraphPage` with `createRoot` inside `MemoryRouter`, then use `act` and a dispatched `MouseEvent`. Assert default note mode, that the lazy entity test double is not mounted before selection, lazy fallback while loading, switch back preserving note view, remount resetting to notes, and an entity component that throws does not remove mode controls. Suppress the expected test-only `console.error`, then assert the user can switch to notes after the boundary fallback. The snapshot-call contract stays in `EntityGraphView.test.tsx`; GraphPage only proves whether the entity view mounts.
 
   ```tsx
-  expect(entityGraphService.readApprovedSnapshot).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '实体图谱' }))
-  expect(screen.getByRole('button', { name: '笔记图谱' })).toBeVisible()
+  const entityButton = [...(container?.querySelectorAll('button') ?? [])]
+    .find((button) => button.textContent === '实体图谱')
+  await act(async () => {
+    entityButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
+  expect(container?.textContent).toContain('实体图谱测试视图')
   ```
 
 - [ ] **Step 2: Run the exact page test and confirm failure.**
@@ -461,11 +490,21 @@ Interfaces:
 
 - [ ] **Step 3: Implement the minimal mode shell.**
 
-  Keep `App.tsx` and `/graph` route unchanged. Add accessible mode buttons, `useState<GraphMode>('notes')`, `React.lazy(() => import('../features/graph/entity-graph/EntityGraphView'))`, a small Suspense fallback, and conditional view rendering. Do not encode mode in any URL or persistence system.
+  Keep `App.tsx` and `/graph` route unchanged. Add accessible mode buttons, `useState<GraphMode>('notes')`, `React.lazy(() => import('../features/graph/entity-graph/EntityGraphView'))`, a small Suspense fallback, and an internal narrow class error boundary in `GraphPage`; do not install `react-error-boundary`. Mode controls remain outside that boundary. The boundary renders a local failure message for a rejected entity bundle or entity-render exception, while the note view remains selectable. Because the boundary is conditionally mounted only for entity mode, switching to notes unmounts it and entering entity mode again creates fresh boundary state. Do not encode mode in any URL or persistence system.
 
   ```tsx
+  import { Component, type ReactNode } from 'react'
+
+  class EntityGraphBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+    state = { failed: false }
+    static getDerivedStateFromError(): { failed: boolean } { return { failed: true } }
+    render(): ReactNode { return this.state.failed ? <p role="alert">实体图谱加载失败，可切回笔记图谱。</p> : this.props.children }
+  }
+
   const [mode, setMode] = useState<GraphMode>('notes')
-  {mode === 'notes' ? <NoteGraphView /> : <Suspense fallback={<p>正在加载实体图谱……</p>}><EntityGraphView /></Suspense>}
+  {mode === 'notes' ? <NoteGraphView /> : (
+    <EntityGraphBoundary><Suspense fallback={<p>正在加载实体图谱……</p>}><EntityGraphView /></Suspense></EntityGraphBoundary>
+  )}
   ```
 
 - [ ] **Step 4: Confirm feature isolation.**
@@ -504,15 +543,26 @@ Interfaces:
 
 - [ ] **Step 1: Write a failing production E2E with page-side IndexedDB seed.**
 
-  Use `page.evaluate` to open `LearningKnowledgeBase`, transactionally add only uniquely prefixed approved `knowledgeEntities` and `knowledgeRelations`, including one suggested entity that must not render. Do not clear the whole database, add a seed API, use DeepSeek, alter the production 4173 instance or make external HTTP requests.
+  First visit `/graph` and wait for its rendered shell. `src/main.tsx` waits for `migrateFromLocalStorage()`, which opens and upgrades `LearningKnowledgeBase` through the declared Dexie v11 schema; only after that may `page.evaluate` open the existing database. `onupgradeneeded` must reject, and the test must reject after closing the database if either required object store is absent, so the test never creates a version or object store. Transactionally add only uniquely prefixed approved `knowledgeEntities` and `knowledgeRelations`, including one suggested entity that must not render. Do not clear the whole database, add a seed API, use DeepSeek, alter the production 4173 instance or make external HTTP requests.
 
   ```ts
+  await page.goto('/graph')
+  await expect(page.getByRole('heading', { name: '知识图谱' })).toBeVisible()
   await page.evaluate(async ({ entityId, relatedId, hiddenId, relationId }) => {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open('LearningKnowledgeBase')
+      request.onupgradeneeded = () => {
+        request.transaction?.abort()
+        reject(new Error('E2E must not create or upgrade LearningKnowledgeBase'))
+      }
       request.onerror = () => reject(request.error)
       request.onsuccess = () => {
         const database = request.result
+        if (!database.objectStoreNames.contains('knowledgeEntities') || !database.objectStoreNames.contains('knowledgeRelations')) {
+          database.close()
+          reject(new Error('E2E database is missing knowledge entity stores'))
+          return
+        }
         const transaction = database.transaction(['knowledgeEntities', 'knowledgeRelations'], 'readwrite')
         transaction.objectStore('knowledgeEntities').put({ id: entityId, canonicalName: 'E2E CPU', aliases: ['E2E 处理器'], type: 'concept', status: 'approved', description: '', createdAt: '2026-07-13T00:00:00.000Z', updatedAt: '2026-07-13T00:00:00.000Z' })
         transaction.objectStore('knowledgeEntities').put({ id: relatedId, canonicalName: 'E2E 缓存', aliases: [], type: 'concept', status: 'approved', description: '', createdAt: '2026-07-13T00:00:00.000Z', updatedAt: '2026-07-13T00:00:00.000Z' })
@@ -568,10 +618,9 @@ Interfaces:
 ## Plan Self-Check
 
 - [x] The seven tasks cover all approved design requirements: note graph preservation, approved snapshot I/O, pure business graph, static bounded layout, read-only UI, local mode integration, production E2E and README.
-- [x] Later interfaces are defined before use and use the current repository type names from `src/types.ts`.
+- [x] Later interfaces are defined before use and use the current repository type names from physical file `src/types/index.ts`, while source imports retain existing directory-import style.
 - [x] Every task has explicit files, consumed/produced interfaces, failure-first test command, minimal implementation details, focused pass command, regression/diff check and one commit boundary.
 - [x] Service I/O pre-filtering and builder defensive approved validation are distinct; only EntityGraphView orchestrates service, builder and layout.
-- [x] Search before cutoff, orphan retention, stable sorting, 300 cap, cut-edge cleanup, fixed 180 ticks, immutable d3 input and stale async-result protection all have code and test coverage.
-- [x] The plan does not change Dexie, Backup v5, React Flow version, existing routes, AI, global state, worker strategy or unrelated features.
-- [x] Placeholder scan is clean: no deferred implementation marker, vague test instruction or undefined public interface remains.
-
+- [x] Search before cutoff, orphan retention, stable sorting, 300 cap, cut-edge cleanup, fixed 180 ticks, immutable d3 input, unstyled copied layout edges, directed/symmetric marker rules and stale async-result protection all have code and test coverage.
+- [x] The plan does not change Dexie, Backup v5, React Flow version, existing routes, AI, global state, worker strategy or unrelated features; GraphPage uses its own narrow boundary instead of a new dependency.
+- [x] Placeholder scan is clean: no deferred implementation marker, vague test instruction or undefined public interface remains; test instructions use repository Vitest jsdom, fake IndexedDB and React DOM patterns.
