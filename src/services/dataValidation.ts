@@ -323,9 +323,16 @@ export function parseBackupJson(text: string): BackupData {
   const hasKnownField = ['notes', 'deletedNotes', 'projects', 'courses', 'directories', 'images', 'aiResults', 'knowledgeEntities', 'noteEntityLinks', 'knowledgeRelations'].some((key) => key in rawData)
   if (!hasKnownField) throw new Error('备份文件不包含可识别的数据表')
 
+  const notes = ensureUniqueIds(recordArray(rawData.notes, 'notes', normalizeNoteRecord), 'notes')
+  const deletedNotes = ensureUniqueIds(recordArray(rawData.deletedNotes, 'deletedNotes', normalizeDeletedNoteRecord), 'deletedNotes')
+  const activeNoteIds = new Set(notes.map((note) => note.id))
+  if (deletedNotes.some((note) => activeNoteIds.has(note.id))) {
+    throw new Error('备份中同一笔记不能同时处于活动状态和回收站状态')
+  }
+
   return {
-    notes: ensureUniqueIds(recordArray(rawData.notes, 'notes', normalizeNoteRecord), 'notes'),
-    deletedNotes: ensureUniqueIds(recordArray(rawData.deletedNotes, 'deletedNotes', normalizeDeletedNoteRecord), 'deletedNotes'),
+    notes,
+    deletedNotes,
     projects: ensureUniqueIds(recordArray(rawData.projects, 'projects', normalizeProjectRecord), 'projects'),
     courses: ensureUniqueIds(recordArray(rawData.courses, 'courses', normalizeCourseRecord), 'courses'),
     directories: ensureUniqueIds(recordArray(rawData.directories, 'directories', normalizeDirectoryRecord), 'directories'),

@@ -53,4 +53,9 @@ describe('parseBackupJson', () => {
     }))
     expect(data.aiResults).toEqual([expect.objectContaining({ type: 'knowledge_candidates' })])
   })
+  it('拒绝同一笔记 ID 同时出现在活动笔记和回收站', () => {
+    const active = { id: 'note_conflict', type: 'knowledge_fragment', title: '活动', content: '', createdAt: now, updatedAt: now }
+    const deleted = { ...active, deletedAt: now, deletionReason: 'manual' }
+    expect(() => parseBackupJson(JSON.stringify({ notes: [active], deletedNotes: [deleted] }))).toThrow('同一笔记不能同时处于活动状态和回收站状态')
+  })
 })

@@ -1,6 +1,6 @@
 import { db } from './db'
 import { parseBackupJson, type BackupData } from './dataValidation'
-import type { KnowledgeRelation } from '../types'
+import type { KnowledgeEntity, KnowledgeRelation } from '../types'
 
 export interface BackupEnvelope {
   format: 'learning-knowledge-base'
@@ -11,10 +11,27 @@ export interface BackupEnvelope {
   data: BackupData
 }
 
+type BackupWarningTable = 'notes' | 'deletedNotes' | 'aiResults' | 'knowledgeEntities' | 'noteEntityLinks' | 'knowledgeRelations'
+type BackupWarningReason =
+  | 'missing_note'
+  | 'note_entity_link_note_missing'
+  | 'note_entity_link_entity_missing'
+  | 'note_entity_link_duplicate'
+  | 'knowledge_entity_canonical_name_conflict'
+  | 'active_note_conflicts_with_deleted_note'
+  | 'deleted_note_conflicts_with_active_note'
+  | 'relation_from_entity_missing'
+  | 'relation_to_entity_missing'
+  | 'relation_self_reference'
+  | 'relation_duplicate'
+  | 'relation_ai_result_missing'
+  | 'relation_evidence_note_missing'
+
 export interface BackupRestoreWarning {
-  table: 'aiResults' | 'noteEntityLinks' | 'knowledgeRelations'
+  table: BackupWarningTable
   recordId: string
-  reason: 'missing_note' | 'note_entity_link_note_missing' | 'note_entity_link_entity_missing' | 'relation_from_entity_missing' | 'relation_to_entity_missing' | 'relation_self_reference' | 'relation_duplicate' | 'relation_ai_result_missing' | 'relation_evidence_note_missing'
+  reason: BackupWarningReason
+  conflictingRecordId?: string
   noteId?: string
   entityId?: string
   relationId?: string
@@ -26,6 +43,8 @@ export interface BackupImportReport {
   restoredKnowledgeEntities: number
   restoredNoteEntityLinks: number
   restoredKnowledgeRelations: number
+  skippedNotes: number
+  skippedDeletedNotes: number
   skippedKnowledgeEntities: number
   skippedNoteEntityLinks: number
   skippedKnowledgeRelations: number
@@ -47,6 +66,25 @@ function getBackupCounts(data: BackupData): Record<keyof BackupData, number> {
     noteEntityLinks: data.noteEntityLinks.length,
     knowledgeRelations: data.knowledgeRelations.length,
   }
+}
+
+function canonicalNameKey(name: string): string {
+  return name.trim().toLocaleLowerCase()
+}
+
+function addEntityToCanonicalIndex(index: Map<string, Set<string>>, entity: KnowledgeEntity): void {
+  const key = canonicalNameKey(entity.canonicalName)
+  const ids = index.get(key) ?? new Set<string>()
+  ids.add(entity.id)
+  index.set(key, ids)
+}
+
+function removeEntityFromCanonicalIndex(index: Map<string, Set<string>>, entity: KnowledgeEntity): void {
+  const key = canonicalNameKey(entity.canonicalName)
+  const ids = index.get(key)
+  if (!ids) return
+  ids.delete(entity.id)
+  if (ids.size === 0) index.delete(key)
 }
 
 export async function createBackup(): Promise<BackupEnvelope> {
@@ -77,8 +115,11 @@ export async function importBackup(text: string): Promise<BackupImportReport> {
   const data = parseBackupJson(text)
   const warnings: BackupRestoreWarning[] = []
   const restored = { knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0 }
-  const skipped = { knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0 }
+  const skipped = { notes: 0, deletedNotes: 0, knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0 }
+  const restoredNotes: BackupData['notes'] = []
+  const restoredDeletedNotes: BackupData['deletedNotes'] = []
   const validAIResults: BackupData['aiResults'] = []
+  const restoredEntities: BackupData['knowledgeEntities'] = []
   const restoredLinks: BackupData['noteEntityLinks'] = []
   const restoredRelations: BackupData['knowledgeRelations'] = []
 
@@ -86,13 +127,30 @@ export async function importBackup(text: string): Promise<BackupImportReport> {
     db.notes, db.deletedNotes, db.directories, db.projects, db.courses, db.images, db.aiResults,
     db.knowledgeEntities, db.noteEntityLinks, db.knowledgeRelations,
   ], async () => {
-    // Primary records are merged first. The backup overwrites matching IDs; local-only data remains available.
-    if (data.deletedNotes.length) await db.deletedNotes.bulkPut(data.deletedNotes)
-    if (data.notes.length) await db.notes.bulkPut(data.notes)
+    // Never move a local note between active and deleted states during a merge.
+    for (const note of data.notes) {
+      if (await db.deletedNotes.get(note.id)) {
+        skipped.notes += 1
+        warnings.push({ table: 'notes', recordId: note.id, noteId: note.id, conflictingRecordId: note.id, reason: 'active_note_conflicts_with_deleted_note' })
+      } else {
+        restoredNotes.push(note)
+      }
+    }
+    for (const deletedNote of data.deletedNotes) {
+      if (await db.notes.get(deletedNote.id)) {
+        skipped.deletedNotes += 1
+        warnings.push({ table: 'deletedNotes', recordId: deletedNote.id, noteId: deletedNote.id, conflictingRecordId: deletedNote.id, reason: 'deleted_note_conflicts_with_active_note' })
+      } else {
+        restoredDeletedNotes.push(deletedNote)
+      }
+    }
+
     if (data.directories.length) await db.directories.bulkPut(data.directories)
     if (data.projects.length) await db.projects.bulkPut(data.projects)
     if (data.courses.length) await db.courses.bulkPut(data.courses)
     if (data.images.length) await db.images.bulkPut(data.images)
+    if (restoredNotes.length) await db.notes.bulkPut(restoredNotes)
+    if (restoredDeletedNotes.length) await db.deletedNotes.bulkPut(restoredDeletedNotes)
 
     const hasNote = async (noteId: string): Promise<boolean> => {
       const activeNote = await db.notes.get(noteId)
@@ -105,21 +163,55 @@ export async function importBackup(text: string): Promise<BackupImportReport> {
     }
     if (validAIResults.length) await db.aiResults.bulkPut(validAIResults)
 
-    if (data.knowledgeEntities.length) await db.knowledgeEntities.bulkPut(data.knowledgeEntities)
-    restored.knowledgeEntities = data.knowledgeEntities.length
+    const existingEntities = await db.knowledgeEntities.toArray()
+    const entitiesById = new Map(existingEntities.map((entity) => [entity.id, entity]))
+    const entitiesByCanonicalName = new Map<string, Set<string>>()
+    for (const entity of existingEntities) addEntityToCanonicalIndex(entitiesByCanonicalName, entity)
+
+    for (const entity of data.knowledgeEntities) {
+      const existingById = entitiesById.get(entity.id)
+      const conflictingIds = entitiesByCanonicalName.get(canonicalNameKey(entity.canonicalName))
+      const conflictingRecordId = conflictingIds && [...conflictingIds]
+        .filter((id) => id !== entity.id)
+        .sort()[0]
+
+      if (conflictingRecordId) {
+        skipped.knowledgeEntities += 1
+        warnings.push({ table: 'knowledgeEntities', recordId: entity.id, entityId: conflictingRecordId, conflictingRecordId, reason: 'knowledge_entity_canonical_name_conflict' })
+        continue
+      }
+
+      if (existingById) removeEntityFromCanonicalIndex(entitiesByCanonicalName, existingById)
+      await db.knowledgeEntities.put(entity)
+      addEntityToCanonicalIndex(entitiesByCanonicalName, entity)
+      entitiesById.set(entity.id, entity)
+      restoredEntities.push(entity)
+      restored.knowledgeEntities += 1
+    }
 
     for (const link of data.noteEntityLinks) {
       if (!await hasNote(link.noteId)) {
         warnings.push({ table: 'noteEntityLinks', recordId: link.id, noteId: link.noteId, reason: 'note_entity_link_note_missing' })
         skipped.noteEntityLinks += 1
-      } else if (!await db.knowledgeEntities.get(link.entityId)) {
+        continue
+      }
+      if (!await db.knowledgeEntities.get(link.entityId)) {
         warnings.push({ table: 'noteEntityLinks', recordId: link.id, entityId: link.entityId, reason: 'note_entity_link_entity_missing' })
         skipped.noteEntityLinks += 1
-      } else {
-        await db.noteEntityLinks.put(link)
-        restoredLinks.push(link)
-        restored.noteEntityLinks += 1
+        continue
       }
+
+      const sameIdentity = await db.noteEntityLinks.where('[noteId+entityId]').equals([link.noteId, link.entityId]).toArray()
+      const duplicate = sameIdentity.find((current) => current.id !== link.id)
+      if (duplicate) {
+        warnings.push({ table: 'noteEntityLinks', recordId: link.id, noteId: link.noteId, entityId: link.entityId, conflictingRecordId: duplicate.id, reason: 'note_entity_link_duplicate' })
+        skipped.noteEntityLinks += 1
+        continue
+      }
+
+      await db.noteEntityLinks.put(link)
+      restoredLinks.push(link)
+      restored.noteEntityLinks += 1
     }
 
     for (const rawRelation of data.knowledgeRelations) {
@@ -163,10 +255,20 @@ export async function importBackup(text: string): Promise<BackupImportReport> {
   })
 
   return {
-    counts: getBackupCounts({ ...data, aiResults: validAIResults, noteEntityLinks: restoredLinks, knowledgeRelations: restoredRelations }),
+    counts: getBackupCounts({
+      ...data,
+      notes: restoredNotes,
+      deletedNotes: restoredDeletedNotes,
+      aiResults: validAIResults,
+      knowledgeEntities: restoredEntities,
+      noteEntityLinks: restoredLinks,
+      knowledgeRelations: restoredRelations,
+    }),
     restoredKnowledgeEntities: restored.knowledgeEntities,
     restoredNoteEntityLinks: restored.noteEntityLinks,
     restoredKnowledgeRelations: restored.knowledgeRelations,
+    skippedNotes: skipped.notes,
+    skippedDeletedNotes: skipped.deletedNotes,
     skippedKnowledgeEntities: skipped.knowledgeEntities,
     skippedNoteEntityLinks: skipped.noteEntityLinks,
     skippedKnowledgeRelations: skipped.knowledgeRelations,

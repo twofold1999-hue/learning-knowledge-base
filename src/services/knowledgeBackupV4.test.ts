@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBackup, importBackup } from './backupService'
 import { db } from './db'
 import type { AIResult, DeletedNote, KnowledgeEntity, KnowledgeRelation, Note, NoteEntityLink } from '../types'
@@ -120,5 +120,145 @@ describe('Backup v4 知识模型恢复', () => {
     expect(report.warnings.map((warning) => warning.reason)).toEqual(expect.arrayContaining(['relation_ai_result_missing', 'relation_evidence_note_missing']))
     await expect(db.knowledgeRelations.get('relation_missing_ai')).resolves.toMatchObject({ aiResultId: null, evidenceNoteId: deletedNote.id })
     await expect(db.knowledgeRelations.get('relation_missing_evidence')).resolves.toMatchObject({ aiResultId: aiResult.id, evidenceNoteId: null })
+  })
+  it('跳过不同 ID 但标准名大小写相同的实体，并准确报告冲突', async () => {
+    const local = { ...entityA, id: 'entity_local', canonicalName: 'Python' }
+    const backup = { ...entityA, id: 'entity_backup', canonicalName: ' python ' }
+    await db.knowledgeEntities.add(local)
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ knowledgeEntities: [backup] }) }))
+
+    expect(report).toMatchObject({ restoredKnowledgeEntities: 0, skippedKnowledgeEntities: 1 })
+    expect(report.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: 'knowledgeEntities', recordId: backup.id, reason: 'knowledge_entity_canonical_name_conflict', conflictingRecordId: local.id, entityId: local.id }),
+    ]))
+    await expect(db.knowledgeEntities.get(local.id)).resolves.toEqual(local)
+    await expect(db.knowledgeEntities.get(backup.id)).resolves.toBeUndefined()
+  })
+
+  it('允许相同 ID 的实体覆盖，并恢复没有标准名冲突的新实体', async () => {
+    await db.knowledgeEntities.add(entityA)
+    const covered = { ...entityA, canonicalName: '覆盖后的实体' }
+    const fresh = { ...entityB, id: 'entity_fresh', canonicalName: '新实体' }
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ knowledgeEntities: [covered, fresh] }) }))
+
+    expect(report).toMatchObject({ restoredKnowledgeEntities: 2, skippedKnowledgeEntities: 0 })
+    await expect(db.knowledgeEntities.get(entityA.id)).resolves.toEqual(covered)
+    await expect(db.knowledgeEntities.get(fresh.id)).resolves.toEqual(fresh)
+  })
+
+  it('同 ID 实体改名为其他实体已占用的标准名时跳过，且不覆盖本地实体', async () => {
+    const localPython = { ...entityA, id: 'entity_1', canonicalName: 'Python' }
+    const localJavaScript = { ...entityB, id: 'entity_2', canonicalName: 'JavaScript' }
+    const conflictingReplacement = { ...localJavaScript, canonicalName: ' python ' }
+    await db.knowledgeEntities.bulkAdd([localPython, localJavaScript])
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ knowledgeEntities: [conflictingReplacement] }) }))
+
+    expect(report).toMatchObject({ restoredKnowledgeEntities: 0, skippedKnowledgeEntities: 1 })
+    expect(report.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: 'knowledgeEntities', recordId: conflictingReplacement.id, reason: 'knowledge_entity_canonical_name_conflict', conflictingRecordId: localPython.id, entityId: localPython.id }),
+    ]))
+    await expect(db.knowledgeEntities.get(localPython.id)).resolves.toEqual(localPython)
+    await expect(db.knowledgeEntities.get(localJavaScript.id)).resolves.toEqual(localJavaScript)
+  })
+
+  it('跳过不同 ID 但 noteId 与 entityId 相同的笔记关联', async () => {
+    const localLink = { ...link, id: 'link_local' }
+    const backupLink = { ...link, id: 'link_backup_duplicate' }
+    await db.notes.add(note)
+    await db.knowledgeEntities.add(entityA)
+    await db.noteEntityLinks.add(localLink)
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ noteEntityLinks: [backupLink] }) }))
+
+    expect(report).toMatchObject({ restoredNoteEntityLinks: 0, skippedNoteEntityLinks: 1 })
+    expect(report.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: 'noteEntityLinks', recordId: backupLink.id, reason: 'note_entity_link_duplicate', conflictingRecordId: localLink.id, noteId: note.id, entityId: entityA.id }),
+    ]))
+    await expect(db.noteEntityLinks.get(localLink.id)).resolves.toEqual(localLink)
+    await expect(db.noteEntityLinks.get(backupLink.id)).resolves.toBeUndefined()
+  })
+
+  it('允许相同 ID 的笔记关联覆盖，且不同复合身份可以恢复', async () => {
+    const local = { ...link, role: 'mentions' as const }
+    const covered = { ...link, role: 'defines' as const }
+    const otherNote = { ...note, id: 'note_other' }
+    const otherLink = { ...link, id: 'link_other_note', noteId: otherNote.id }
+    await db.notes.bulkAdd([note, otherNote])
+    await db.knowledgeEntities.add(entityA)
+    await db.noteEntityLinks.add(local)
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ noteEntityLinks: [covered, otherLink] }) }))
+
+    expect(report).toMatchObject({ restoredNoteEntityLinks: 2, skippedNoteEntityLinks: 0 })
+    await expect(db.noteEntityLinks.get(local.id)).resolves.toEqual(covered)
+    await expect(db.noteEntityLinks.get(otherLink.id)).resolves.toEqual(otherLink)
+  })
+
+  it('同 ID 笔记关联改为其他关联已占用的复合身份时跳过，且不覆盖本地关联', async () => {
+    const noteTwo = { ...note, id: 'note_2' }
+    const localLinkOne = { ...link, id: 'link_1', noteId: note.id, entityId: entityA.id }
+    const localLinkTwo = { ...link, id: 'link_2', noteId: noteTwo.id, entityId: entityB.id }
+    const conflictingReplacement = { ...localLinkTwo, noteId: note.id, entityId: entityA.id }
+    await db.notes.bulkAdd([note, noteTwo])
+    await db.knowledgeEntities.bulkAdd([entityA, entityB])
+    await db.noteEntityLinks.bulkAdd([localLinkOne, localLinkTwo])
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ noteEntityLinks: [conflictingReplacement] }) }))
+
+    expect(report).toMatchObject({ restoredNoteEntityLinks: 0, skippedNoteEntityLinks: 1 })
+    expect(report.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: 'noteEntityLinks', recordId: conflictingReplacement.id, reason: 'note_entity_link_duplicate', conflictingRecordId: localLinkOne.id, noteId: note.id, entityId: entityA.id }),
+    ]))
+    await expect(db.noteEntityLinks.get(localLinkOne.id)).resolves.toEqual(localLinkOne)
+    await expect(db.noteEntityLinks.get(localLinkTwo.id)).resolves.toEqual(localLinkTwo)
+  })
+
+  it('在本地活动笔记与备份回收站笔记同 ID 时跳过备份记录', async () => {
+    await db.notes.add(note)
+    const conflictingDeleted = { ...deletedNote, id: note.id }
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ deletedNotes: [conflictingDeleted] }) }))
+
+    expect(report).toMatchObject({ skippedDeletedNotes: 1 })
+    expect(report.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: 'deletedNotes', recordId: note.id, noteId: note.id, reason: 'deleted_note_conflicts_with_active_note', conflictingRecordId: note.id }),
+    ]))
+    await expect(db.notes.get(note.id)).resolves.toEqual(note)
+    await expect(db.deletedNotes.get(note.id)).resolves.toBeUndefined()
+  })
+
+  it('在本地回收站笔记与备份活动笔记同 ID 时跳过备份记录', async () => {
+    const localDeleted = { ...deletedNote, id: note.id }
+    await db.deletedNotes.add(localDeleted)
+
+    const report = await importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ notes: [note] }) }))
+
+    expect(report).toMatchObject({ skippedNotes: 1 })
+    expect(report.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ table: 'notes', recordId: note.id, noteId: note.id, reason: 'active_note_conflicts_with_deleted_note', conflictingRecordId: note.id }),
+    ]))
+    await expect(db.deletedNotes.get(note.id)).resolves.toEqual(localDeleted)
+    await expect(db.notes.get(note.id)).resolves.toBeUndefined()
+  })
+
+  it('关系阶段失败时，恢复事务不会留下已写入的主记录或知识数据', async () => {
+    const local = { ...note, id: 'note_local' }
+    const importedRelation = { ...relation, evidenceNoteId: null }
+    await db.notes.add(local)
+    const spy = vi.spyOn(db.knowledgeRelations, 'put').mockRejectedValueOnce(new Error('relation write failed'))
+
+    await expect(importBackup(JSON.stringify({ format: 'learning-knowledge-base', version: 4, data: backupData({ notes: [note], aiResults: [aiResult], knowledgeEntities: [entityA, entityB], noteEntityLinks: [link], knowledgeRelations: [importedRelation] }) }))).rejects.toThrow('relation write failed')
+    spy.mockRestore()
+
+    await expect(db.notes.get(local.id)).resolves.toEqual(local)
+    await expect(db.notes.get(note.id)).resolves.toBeUndefined()
+    await expect(db.deletedNotes.count()).resolves.toBe(0)
+    await expect(db.aiResults.count()).resolves.toBe(0)
+    await expect(db.knowledgeEntities.count()).resolves.toBe(0)
+    await expect(db.noteEntityLinks.count()).resolves.toBe(0)
+    await expect(db.knowledgeRelations.count()).resolves.toBe(0)
   })
 })
