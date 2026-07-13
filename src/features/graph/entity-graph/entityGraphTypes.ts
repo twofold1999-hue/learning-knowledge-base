@@ -22,3 +22,31 @@ export interface EntityGraphFilters {
 export interface EntityGraphService {
   readApprovedSnapshot(): Promise<EntityGraphSnapshot>
 }
+
+export interface EntityGraphBuildInput {
+  entities: KnowledgeEntity[]
+  relations: KnowledgeRelation[]
+  filters: EntityGraphFilters
+  maxNodes?: number
+}
+
+export interface EntityGraphBusinessNode {
+  id: string
+  entity: KnowledgeEntity
+  connectionCount: number
+}
+
+export interface EntityGraphBusinessEdge {
+  id: string
+  relation: KnowledgeRelation
+  source: string
+  target: string
+}
+
+export interface EntityGraphBuildResult {
+  nodes: EntityGraphBusinessNode[]
+  edges: EntityGraphBusinessEdge[]
+  totalMatchedEntities: number
+  truncated: boolean
+  connectionCount: ReadonlyMap<string, number>
+}
