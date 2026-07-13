@@ -1,5 +1,5 @@
 import { db } from './db'
-import { parseBackupJson, type BackupData } from './dataValidation'
+import { assertBackupJsonSize, parseBackupJson, type BackupData } from './dataValidation'
 import type { KnowledgeEntity, KnowledgeRelation } from '../types'
 
 export interface BackupEnvelope {
@@ -87,6 +87,12 @@ function removeEntityFromCanonicalIndex(index: Map<string, Set<string>>, entity:
   if (ids.size === 0) index.delete(key)
 }
 
+export function serializeBackup(envelope: BackupEnvelope, maxBytes?: number): string {
+  const serialized = JSON.stringify(envelope, null, 2)
+  if (typeof serialized !== 'string') throw new Error('备份无法序列化')
+  assertBackupJsonSize(serialized, maxBytes)
+  return serialized
+}
 export async function createBackup(): Promise<BackupEnvelope> {
   const data: BackupData = {
     notes: await db.notes.toArray(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isSafeImageDataUrl, parseBackupJson } from './dataValidation'
+import { BackupTooLargeError, assertBackupJsonSize, getUtf8ByteLength, isSafeImageDataUrl, parseBackupJson } from './dataValidation'
 
 const now = '2026-07-10T00:00:00.000Z'
 
@@ -57,5 +57,35 @@ describe('parseBackupJson', () => {
     const active = { id: 'note_conflict', type: 'knowledge_fragment', title: '活动', content: '', createdAt: now, updatedAt: now }
     const deleted = { ...active, deletedAt: now, deletionReason: 'manual' }
     expect(() => parseBackupJson(JSON.stringify({ notes: [active], deletedNotes: [deleted] }))).toThrow('同一笔记不能同时处于活动状态和回收站状态')
+  })
+})
+describe('备份 JSON UTF-8 大小限制', () => {
+  it('按 UTF-8 字节计算 ASCII、中文、emoji 和混合文本', () => {
+    expect(getUtf8ByteLength('abc')).toBe(3)
+    expect(getUtf8ByteLength('中')).toBe(3)
+    expect(getUtf8ByteLength('中')).toBeGreaterThan('中'.length)
+    expect(getUtf8ByteLength('😀')).toBe(4)
+    expect(getUtf8ByteLength('a中😀')).toBe(8)
+  })
+
+  it('允许等于上限的 JSON，并在超过一字节时于 JSON.parse 前拒绝', () => {
+    const validJson = JSON.stringify({ notes: [] })
+    const exactBytes = getUtf8ByteLength(validJson)
+    expect(parseBackupJson(validJson, exactBytes).notes).toEqual([])
+    expect(() => parseBackupJson(validJson, exactBytes - 1)).toThrow(BackupTooLargeError)
+    expect(() => parseBackupJson('中', 2)).toThrow(BackupTooLargeError)
+  })
+
+  it('大小错误只包含安全的字节信息，不回显用户内容', () => {
+    let received: unknown
+    try {
+      assertBackupJsonSize('秘密正文😀', 1)
+    } catch (error) {
+      received = error
+    }
+
+    expect(received).toBeInstanceOf(BackupTooLargeError)
+    expect(received).toMatchObject({ actualBytes: getUtf8ByteLength('秘密正文😀'), maxBytes: 1 })
+    expect((received as Error).message).not.toContain('秘密正文')
   })
 })

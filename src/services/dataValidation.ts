@@ -4,6 +4,28 @@ const MAX_TITLE_LENGTH = 10_000
 const MAX_CONTENT_LENGTH = 5_000_000
 const MAX_IMAGE_DATA_LENGTH = 16_000_000
 const MAX_LIST_ITEMS = 1_000
+export const MAX_BACKUP_JSON_BYTES = 100 * 1024 * 1024
+
+export class BackupTooLargeError extends Error {
+  readonly actualBytes: number
+  readonly maxBytes: number
+
+  constructor(actualBytes: number, maxBytes: number) {
+    super(`备份 JSON 大小超过允许上限（${maxBytes} 字节）`)
+    this.name = 'BackupTooLargeError'
+    this.actualBytes = actualBytes
+    this.maxBytes = maxBytes
+  }
+}
+
+export function getUtf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).byteLength
+}
+
+export function assertBackupJsonSize(text: string, maxBytes = MAX_BACKUP_JSON_BYTES): void {
+  const actualBytes = getUtf8ByteLength(text)
+  if (actualBytes > maxBytes) throw new BackupTooLargeError(actualBytes, maxBytes)
+}
 const SAFE_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|gif|webp|avif);base64,[a-z0-9+/=\s]+$/i
 
 type UnknownRecord = Record<string, unknown>
@@ -307,8 +329,8 @@ function normalizeKnowledgeRelationRecord(value: unknown, index = 0): KnowledgeR
     updatedAt: isoDate(record.updatedAt, `knowledgeRelations[${index}].updatedAt`, createdAt),
   }
 }
-export function parseBackupJson(text: string): BackupData {
-  if (text.length > 100_000_000) throw new Error('备份文件超过 100 MB 限制')
+export function parseBackupJson(text: string, maxBytes = MAX_BACKUP_JSON_BYTES): BackupData {
+  assertBackupJsonSize(text, maxBytes)
   let parsed: unknown
   try {
     parsed = JSON.parse(text)

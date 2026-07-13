@@ -1,4 +1,4 @@
-import { createBackup } from './backupService'
+import { createBackup, serializeBackup } from './backupService'
 import { db } from './db'
 
 const BACKUP_DIRECTORY_KEY = 'local-backup-directory-v1'
@@ -73,7 +73,7 @@ export async function writeLocalBackup(requestPermission = false): Promise<boole
   const directory = await getBackupDirectory()
   if (!directory || !(await canWrite(directory, requestPermission))) return false
   const backup = await createBackup()
-  const content = JSON.stringify(backup, null, 2)
+  const content = serializeBackup(backup)
   const day = backup.exportedAt.slice(0, 10)
   await writeText(directory, 'learning-knowledge-base-latest.json', content)
   await writeText(directory, `learning-knowledge-base-${day}.json`, content)

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createBackup, importBackup } from './backupService'
+import { createBackup, importBackup, serializeBackup } from './backupService'
 import { db } from './db'
+import { BackupTooLargeError, getUtf8ByteLength } from './dataValidation'
 import type { AIResult, Note } from '../types'
 
 const now = '2026-07-12T00:00:00.000Z'
@@ -72,5 +73,21 @@ describe('AIResult 备份与恢复', () => {
     expect(report.counts.notes).toBe(1)
     expect(report.counts.aiResults).toBe(0)
     expect(report.warnings).toEqual([])
+  })
+})
+describe('备份 JSON 序列化大小限制', () => {
+  it('使用 UTF-8 边界序列化，并在超限时提供安全的大小信息', async () => {
+    const backup = await createBackup()
+    const serialized = serializeBackup(backup, Number.MAX_SAFE_INTEGER)
+    const exactBytes = getUtf8ByteLength(serialized)
+
+    expect(serializeBackup(backup, exactBytes)).toBe(serialized)
+    expect(() => serializeBackup(backup, exactBytes - 1)).toThrow(BackupTooLargeError)
+    try {
+      serializeBackup({ ...backup, appVersion: '秘密正文😀' }, 1)
+    } catch (error) {
+      expect(error).toMatchObject({ actualBytes: expect.any(Number), maxBytes: 1 })
+      expect((error as Error).message).not.toContain('秘密正文')
+    }
   })
 })

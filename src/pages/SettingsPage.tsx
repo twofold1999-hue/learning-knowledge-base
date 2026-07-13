@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useUiStore } from '../stores/uiStore'
 import { useNoteStore } from '../stores/noteStore'
-import { createBackup, importBackup } from '../services/backupService'
+import { createBackup, importBackup, serializeBackup } from '../services/backupService'
+import { BackupTooLargeError } from '../services/dataValidation'
 import { waitForPendingSaves } from '../services/saveCoordinator'
 import { downloadNotesAsDocx, downloadNotesAsMarkdown, downloadNotesAsPdf, downloadPortableMarkdownArchive } from '../services/exportService'
 import { connectLocalBackupDirectory, disconnectLocalBackupDirectory, getLocalBackupStatus, type LocalBackupStatus, writeLocalBackup } from '../services/localBackupService'
@@ -48,7 +49,7 @@ export default function SettingsPage() {
     try {
       await waitForPendingSaves()
       const backup = await createBackup()
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+      const blob = new Blob([serializeBackup(backup)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
@@ -60,7 +61,9 @@ export default function SettingsPage() {
       localStorage.setItem('lastBackupAt', backup.exportedAt)
       setStatus(`已导出 ${backup.counts.notes} 篇笔记、${backup.counts.deletedNotes} 条回收站记录、${backup.counts.images} 张图片`)
     } catch (error) {
-      setStatus(error instanceof Error ? `导出失败：${error.message}` : '导出失败')
+      setStatus(error instanceof BackupTooLargeError
+        ? '备份大小超过 100 MiB，未生成文件。请先将大型图片或媒体单独归档，再重新导出。'
+        : error instanceof Error ? `导出失败：${error.message}` : '导出失败')
     } finally {
       setIsBusy(false)
     }
@@ -70,10 +73,6 @@ export default function SettingsPage() {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
-    if (file.size > 100_000_000) {
-      setStatus('导入失败：文件超过 100 MB 限制')
-      return
-    }
     if (!confirm('导入会合并数据；相同 ID 的记录将被备份内容覆盖。确定继续吗？')) return
     setIsBusy(true)
     setStatus(null)
