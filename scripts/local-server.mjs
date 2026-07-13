@@ -36,13 +36,14 @@ function healthResponse(response, status, payload) {
   response.end(JSON.stringify(payload))
 }
 
-export function createLocalServer({ projectRoot = defaultProjectRoot, host = defaultHost, port = defaultPort, instanceId = randomUUID(), openBrowser = defaultOpenBrowser } = {}) {
+export function createLocalServer({ projectRoot = defaultProjectRoot, host = defaultHost, port = defaultPort, instanceId = randomUUID(), openBrowser = defaultOpenBrowser, manageRuntimeState = true } = {}) {
   const distDirectory = resolve(projectRoot, 'dist')
   const mediaDirectory = resolve(projectRoot, 'media')
   if (!existsSync(distDirectory)) throw new Error('未找到 dist 目录。请先执行 npm run build。')
   const aiProxyHandler = createAIProxyHandler({ configProvider: () => getServerAIConfig(projectRoot) })
   let actualPort = port
   let started = false
+  let cleanupPromise
 
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', `http://${host}:${actualPort}`)
@@ -101,7 +102,9 @@ export function createLocalServer({ projectRoot = defaultProjectRoot, host = def
   })
 
   async function cleanup() {
-    if (started) await clearRuntimeState(projectRoot, instanceId)
+    if (!started || !manageRuntimeState) return
+    if (!cleanupPromise) cleanupPromise = clearRuntimeState(projectRoot, instanceId)
+    await cleanupPromise
   }
   server.on('close', () => { void cleanup().catch(() => undefined) })
 
@@ -116,7 +119,7 @@ export function createLocalServer({ projectRoot = defaultProjectRoot, host = def
     const address = server.address()
     actualPort = typeof address === 'object' && address ? address.port : port
     try {
-      await writeRuntimeState(projectRoot, { appId: APP_ID, pid: process.pid, port: actualPort, instanceId, startedAt: new Date().toISOString(), serverEntry: 'scripts/local-server.mjs' })
+      if (manageRuntimeState) await writeRuntimeState(projectRoot, { appId: APP_ID, pid: process.pid, port: actualPort, instanceId, startedAt: new Date().toISOString(), serverEntry: 'scripts/local-server.mjs' })
       started = true
     } catch (error) {
       await new Promise((resolveClose) => server.close(() => resolveClose()))

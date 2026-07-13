@@ -18,7 +18,7 @@
 
 ## 快速开始
 
-1. 安装 [Node.js LTS](https://nodejs.org/)。
+1. 安装 [Node.js 24 LTS](https://nodejs.org/)（项目通过 `.nvmrc` 固定主版本）。
 2. 双击 `启动知识库.cmd`。
 3. 浏览器会自动打开 `http://127.0.0.1:4173`。
 4. 结束时双击 `停止知识库.cmd`。
@@ -120,6 +120,7 @@ npm run typecheck    # TypeScript 检查
 npm run test         # Vitest 单元测试
 npm run build        # 生产构建
 npm run check        # 类型检查 + 单元测试 + 构建
+npm run check:all    # 类型检查 + 单元测试 + 构建 + 生产 E2E
 npm run test:e2e     # Playwright Chromium 冒烟测试
 ```
 
@@ -129,7 +130,9 @@ npm run test:e2e     # Playwright Chromium 冒烟测试
 npx playwright install chromium
 ```
 
-现有 Playwright 冒烟测试验证：首页加载，以及“开始记录 → 选择学习单元”入口可用。测试运行独立的 Vite 服务，不会改动你的本地笔记库。
+Playwright E2E 会先构建 `dist/`，再以独立的 `127.0.0.1:4174` Node 静态服务器运行；它不会使用 Vite 开发服务、不会触碰正式 `4173` 实例或 `.runtime/local-server.json`，也不需要或调用任何 DeepSeek API。测试覆盖首页、SPA 直达路由、安全响应头、健康检查和 IndexedDB 笔记持久化。
+
+GitHub Actions 会在推送到 `main`、面向 `main` 的 Pull Request 以及手动触发时，执行类型检查、单元/Node 服务测试、生产构建和 Chromium E2E。
 
 ## 项目结构与安全边界
 

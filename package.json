@@ -6,14 +6,17 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc",
-    "test": "vitest run && node --test scripts/local-ai-proxy.test.mjs scripts/local-server-control.test.mjs scripts/local-server.test.mjs",
+    "test": "vitest run && node --test scripts/local-ai-proxy.test.mjs scripts/local-server-control.test.mjs scripts/local-server.test.mjs scripts/e2e-server.test.mjs",
     "test:e2e": "playwright test",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "local": "node scripts/local-server.mjs",
     "check": "npm run typecheck && npm run test && npm run build",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build --bundles nsis"
+    "desktop:build": "tauri build --bundles nsis",
+    "pretest:e2e": "npm run build",
+    "e2e:server": "node scripts/e2e-server.mjs",
+    "check:all": "npm run typecheck && npm run test && npm run test:e2e"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -50,5 +53,8 @@
     "vite": "^8.1.4",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
