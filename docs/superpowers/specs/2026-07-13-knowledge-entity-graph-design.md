@@ -37,34 +37,42 @@
 
 支持全部、related_to/相关、depends_on/依赖、contains/包含、explains/解释、contrasts_with/对比、prerequisite/前置。关系类型筛选只影响边；实体即使没有该类型关系也不自动隐藏。
 
-## 单向数据流与 300 节点边界
+## 应用编排、纯构建与 300 节点边界
+
+EntityGraphView 是应用流程调用方；下面是由它发起的独立步骤，不是模块之间的深层调用链：
 
 ~~~text
 EntityGraphView
-  -> entityGraphService
-  -> buildEntityGraph
-  -> forceLayoutAdapter
-  -> React Flow
+  -> entityGraphService.readApprovedSnapshot()
+  -> buildEntityGraph(snapshot, filters)
+  -> forceLayoutAdapter.layout(graph)
+  -> React Flow render(layout)
 ~~~
 
-处理顺序固定为：
+具体编排为：
 
-1. entityGraphService 只读获取 approved 实体与关系。
-2. 应用名称搜索。
-3. 应用实体类型筛选。
-4. 应用关系类型筛选。
-5. 移除端点不在实体结果中的关系。
-6. 统计当前筛选结果中的实体连接数。
-7. 稳定排序实体：连接数降序、canonicalName 稳定排序、实体 ID 稳定排序。
-8. 最多截取 300 个实体。
-9. 再移除端点已被截断的关系。
-10. 保留孤立实体。
-11. 交给布局适配器生成坐标。
-12. UI 只渲染和处理交互。
+1. EntityGraphView 调用 entityGraphService 读取只读快照。
+2. entityGraphService 利用现有 KnowledgeEntity.status 和 KnowledgeRelation.status 索引，优先只读取 approved 数据，减少无用 IndexedDB 读取；它不修改数据库。
+3. EntityGraphView 将快照和筛选条件传给 buildEntityGraph。
+4. buildEntityGraph 防御性重新检查实体与关系是否 approved，移除端点不在有效实体集合中的关系。
+5. buildEntityGraph 应用名称搜索、实体类型筛选和关系类型筛选。
+6. buildEntityGraph 统计当前筛选结果中的实体连接数。
+7. buildEntityGraph 稳定排序实体：连接数降序、canonicalName 稳定排序、实体 ID 稳定排序。
+8. buildEntityGraph 最多截取 300 个实体，再移除端点已被截断的关系，并保留孤立实体。
+9. EntityGraphView 将图构建结果传给 forceLayoutAdapter 生成坐标。
+10. EntityGraphView 将布局结果交给 React Flow 渲染；React Flow 不拥有业务筛选规则。
 
-搜索和筛选必须发生在截断前，因此低连接实体仍可被精确搜索找到。超过限制时不修改数据库、不删除记录，并显示非阻塞提示：
+搜索和筛选必须发生在 300 节点截断前，因此低连接实体仍可被精确搜索找到。超过限制时不修改数据库、不删除记录，并显示非阻塞提示：
 
 > 当前筛选结果共 527 个实体，图谱优先展示连接数最高的 300 个。请使用搜索或筛选缩小范围。
+
+### approved 过滤的两层职责
+
+entityGraphService 是持久化读取适配器。它只做 approved 范围的 I/O 预过滤、空数据与读取错误传递，不执行名称搜索、类型筛选、连接数排序、300 节点截断或布局。
+
+buildEntityGraph 是纯业务转换边界。它不调用 entityGraphService、不读取 Dexie、不调用布局；即使输入包含 suggested、rejected 或失效端点，也重新校验并产生正确的 approved-only 图。它负责名称搜索、类型/关系筛选、连接数、稳定排序、300 节点截断与悬空边移除。
+
+service 的 status 查询是减少无用读取的 I/O 预过滤；builder 的 status 校验是纯业务正确性保护。两者不是两套独立业务实现，不得复制复杂筛选逻辑。forceLayoutAdapter 不读取数据库，entityGraphService 不调用 buildEntityGraph，buildEntityGraph 不调用 entityGraphService。
 
 ## 可替换布局
 
@@ -76,7 +84,7 @@ interface GraphLayoutAdapter {
 }
 ~~~
 
-forceLayoutAdapter 只计算坐标；buildEntityGraph 不计算坐标，entityGraphService 不知道布局，派生坐标不写入 KnowledgeEntity、Dexie 或备份。相同输入应尽量稳定，使用固定初始位置、固定种子或固定模拟迭代次数；测试只断言有限坐标与稳定性，不断言像素值。
+forceLayoutAdapter 只计算坐标；buildEntityGraph 不计算坐标，entityGraphService 不知道布局，派生坐标不写入 KnowledgeEntity、Dexie 或备份。首版输入硬上限为 300 个节点，力导向模拟必须有固定最大迭代次数，不允许无限运行或永久动画式求解。相同输入应尽量稳定，使用固定初始位置、固定种子或固定模拟迭代次数；测试只断言有限坐标与稳定性，不断言像素值。空图和单节点不启动不必要模拟。每次筛选产生新的布局请求标识；旧请求完成后不得覆盖新筛选结果，组件卸载后不得更新状态。首版不强制 Web Worker、多线程、WASM 或后台布局服务；只有真实性能测量证明同步有限迭代仍造成明显卡顿时，才单独设计 Worker 方案。
 
 未来替换为径向、层级或聚类布局时，必须单独评估维护状态、许可证、包体积、API 稳定性，以及是否优于小型自实现适配器。本设计阶段不增加依赖。
 
@@ -125,11 +133,11 @@ src/features/graph/
 
 ### buildEntityGraph
 
-覆盖 approved 数据过滤、canonicalName 和 aliases 搜索、大小写/空格、实体和关系类型筛选、无效端点与非 approved 端点过滤、孤立实体、连接数、稳定排序、300 截断、截断后悬空边移除、搜索后低连接实体进入结果和空数据。
+即使输入包含 suggested、rejected 或失效端点，也覆盖 approved-only 结果、canonicalName 和 aliases 搜索、大小写/空格、实体和关系类型筛选、孤立实体、连接数、稳定排序、300 截断、截断后悬空边移除、搜索后低连接实体进入结果和空数据。
 
 ### entityGraphService
 
-覆盖只读行为、只读 approved 数据、空数据库、数据库错误向上传递，以及失效关系不破坏查询。
+覆盖使用 approved 范围读取、只读行为、空数据库与数据库读取错误向上传递。所有搜索、筛选、排序和截断规则只在 buildEntityGraph 测试。
 
 ### forceLayoutAdapter
 

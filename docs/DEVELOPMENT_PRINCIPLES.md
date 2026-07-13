@@ -10,13 +10,23 @@
 
 ## 2. 分层与依赖方向
 
-推荐方向为：
+推荐边界为：
 
 ~~~text
-UI -> application/service -> domain/pure transformation -> persistence adapter
+UI
+  -> application/service
+
+application/service
+  -> domain/pure transformation
+  -> persistence adapter
+      -> Dexie / external system
 ~~~
 
-禁止 persistence 依赖页面、纯函数读取全局状态、service 操控 React、页面到处直连 Dexie，以及布局算法混入数据查询。
+- domain/pure transformation 不依赖 UI、React、Zustand、Dexie 或浏览器持久化 API。
+- persistence adapter 不依赖 UI。
+- application/service 负责编排纯业务规则和持久化接口。
+- UI 不直接访问 Dexie。
+- 禁止纯函数读取全局状态、service 操控 React，以及布局算法混入数据查询。
 
 ## 3. AI 辅助开发约束
 
@@ -75,7 +85,7 @@ UI -> application/service -> domain/pure transformation -> persistence adapter
 ## 13. 文档原则
 
 - 架构变化更新设计文档，用户可见行为更新 README，数据格式变化更新备份说明。
-- 文档不得包含失效命令、待定或待办占位，以及模糊占位。
+- 文档不得包含失效命令、未完成的占位文字或模糊占位。
 
 ## 14. 完成前检查
 
