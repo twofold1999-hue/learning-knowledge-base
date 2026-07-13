@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { basename, dirname, extname, resolve } from 'node:path'
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
@@ -36,6 +36,15 @@ function healthResponse(response, status, payload) {
   response.end(JSON.stringify(payload))
 }
 
+/** Returns whether a resolved candidate path is the root itself or a real child path. */
+export function isPathInside(rootPath, candidatePath, pathApi = { relative, isAbsolute, sep }) {
+  const relativePath = pathApi.relative(rootPath, candidatePath)
+  return relativePath === '' || (
+    relativePath !== '..'
+    && !relativePath.startsWith('..' + pathApi.sep)
+    && !pathApi.isAbsolute(relativePath)
+  )
+}
 export function createLocalServer({ projectRoot = defaultProjectRoot, host = defaultHost, port = defaultPort, instanceId = randomUUID(), openBrowser = defaultOpenBrowser, manageRuntimeState = true } = {}) {
   const distDirectory = resolve(projectRoot, 'dist')
   const mediaDirectory = resolve(projectRoot, 'media')
@@ -59,9 +68,9 @@ export function createLocalServer({ projectRoot = defaultProjectRoot, host = def
     if (requestedPath === AI_PROXY_PATH) { void aiProxyHandler(request, response); return }
     const filePath = resolve(distDirectory, `.${requestedPath}`)
     const mediaPath = resolve(mediaDirectory, `.${requestedPath.slice('/media'.length)}`)
-    const isInsideDist = filePath === distDirectory || filePath.startsWith(`${distDirectory}\\`)
+    const isInsideDist = isPathInside(distDirectory, filePath)
     const isMediaRequest = requestedPath === '/media' || requestedPath.startsWith('/media/')
-    const isInsideMedia = mediaPath === mediaDirectory || mediaPath.startsWith(`${mediaDirectory}\\`)
+    const isInsideMedia = isPathInside(mediaDirectory, mediaPath)
     const hasExtension = Boolean(extname(requestedPath))
     const target = isMediaRequest && isInsideMedia && existsSync(mediaPath) && statSync(mediaPath).isFile()
       ? mediaPath
