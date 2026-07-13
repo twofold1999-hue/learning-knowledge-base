@@ -50,3 +50,18 @@ export interface EntityGraphBuildResult {
   truncated: boolean
   connectionCount: ReadonlyMap<string, number>
 }
+
+export interface EntityGraphLayoutNode extends EntityGraphBusinessNode {
+  position: { x: number; y: number }
+}
+
+export type EntityGraphLayoutEdge = EntityGraphBusinessEdge
+
+export interface EntityGraphLayoutResult {
+  nodes: EntityGraphLayoutNode[]
+  edges: EntityGraphLayoutEdge[]
+}
+
+export interface EntityGraphLayoutAdapter {
+  layout(input: EntityGraphBuildResult): Promise<EntityGraphLayoutResult>
+}
