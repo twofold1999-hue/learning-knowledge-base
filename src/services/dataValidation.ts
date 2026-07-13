@@ -1,4 +1,4 @@
-import type { AIResult, Course, DeletedNote, Directory, ImageRecord, KnowledgeEntity, KnowledgeRelation, Note, NoteEntityLink, Project, TrashReason } from '../types'
+import type { AIResult, Course, DeletedNote, Directory, ImageRecord, KnowledgeEntity, KnowledgeRelation, KnowledgeAuditLog, Note, NoteEntityLink, Project, TrashReason } from '../types'
 
 const MAX_TITLE_LENGTH = 10_000
 const MAX_CONTENT_LENGTH = 5_000_000
@@ -41,6 +41,7 @@ export interface BackupData {
   knowledgeEntities: KnowledgeEntity[]
   noteEntityLinks: NoteEntityLink[]
   knowledgeRelations: KnowledgeRelation[]
+  knowledgeAuditLogs: KnowledgeAuditLog[]
 }
 
 function asRecord(value: unknown, label: string): UnknownRecord {
@@ -329,6 +330,37 @@ function normalizeKnowledgeRelationRecord(value: unknown, index = 0): KnowledgeR
     updatedAt: isoDate(record.updatedAt, `knowledgeRelations[${index}].updatedAt`, createdAt),
   }
 }
+function normalizeKnowledgeAuditLogRecord(value: unknown, index = 0): KnowledgeAuditLog {
+  const record = asRecord(value, `knowledgeAuditLogs[${index}]`)
+  const targetType = record.targetType
+  if (targetType !== 'entity' && targetType !== 'relation' && targetType !== 'note_entity_link') {
+    throw new Error(`knowledgeAuditLogs[${index}].targetType 无效`)
+  }
+  const action = record.action
+  if (action !== 'created' && action !== 'approved' && action !== 'rejected' && action !== 'updated' && action !== 'deleted') {
+    throw new Error(`knowledgeAuditLogs[${index}].action 无效`)
+  }
+  const source = record.source
+  if (source !== 'manual' && source !== 'ai') {
+    throw new Error(`knowledgeAuditLogs[${index}].source 无效`)
+  }
+  const snapshot = (snapshotValue: unknown, label: string): unknown | null => {
+    if (snapshotValue === null) return null
+    return jsonPayload(snapshotValue, label)
+  }
+  return {
+    id: requiredString(record.id, `knowledgeAuditLogs[${index}].id`, MAX_TITLE_LENGTH),
+    targetType,
+    targetId: requiredString(record.targetId, `knowledgeAuditLogs[${index}].targetId`, MAX_TITLE_LENGTH),
+    action,
+    source,
+    aiResultId: nullableString(record.aiResultId, `knowledgeAuditLogs[${index}].aiResultId`),
+    noteId: nullableString(record.noteId, `knowledgeAuditLogs[${index}].noteId`),
+    before: snapshot(record.before, `knowledgeAuditLogs[${index}].before`),
+    after: snapshot(record.after, `knowledgeAuditLogs[${index}].after`),
+    createdAt: isoDate(record.createdAt, `knowledgeAuditLogs[${index}].createdAt`),
+  }
+}
 export function parseBackupJson(text: string, maxBytes = MAX_BACKUP_JSON_BYTES): BackupData {
   assertBackupJsonSize(text, maxBytes)
   let parsed: unknown
@@ -338,11 +370,13 @@ export function parseBackupJson(text: string, maxBytes = MAX_BACKUP_JSON_BYTES):
     throw new Error('备份文件不是有效 JSON')
   }
   const envelope = asRecord(parsed, '备份文件')
-  if (envelope.format === 'learning-knowledge-base' && envelope.version !== 1 && envelope.version !== 2 && envelope.version !== 3 && envelope.version !== 4) {
+  if (envelope.format === 'learning-knowledge-base' && envelope.version !== 1 && envelope.version !== 2 && envelope.version !== 3 && envelope.version !== 4 && envelope.version !== 5) {
     throw new Error(`不支持的备份版本：${String(envelope.version)}`)
   }
+  const isV5 = envelope.format === 'learning-knowledge-base' && envelope.version === 5
   const rawData = envelope.format === 'learning-knowledge-base' ? asRecord(envelope.data, 'data') : envelope
-  const hasKnownField = ['notes', 'deletedNotes', 'projects', 'courses', 'directories', 'images', 'aiResults', 'knowledgeEntities', 'noteEntityLinks', 'knowledgeRelations'].some((key) => key in rawData)
+  if (isV5 && !Array.isArray(rawData.knowledgeAuditLogs)) throw new Error('knowledgeAuditLogs 必须是数组')
+  const hasKnownField = ['notes', 'deletedNotes', 'projects', 'courses', 'directories', 'images', 'aiResults', 'knowledgeEntities', 'noteEntityLinks', 'knowledgeRelations', 'knowledgeAuditLogs'].some((key) => key in rawData)
   if (!hasKnownField) throw new Error('备份文件不包含可识别的数据表')
 
   const notes = ensureUniqueIds(recordArray(rawData.notes, 'notes', normalizeNoteRecord), 'notes')
@@ -363,5 +397,6 @@ export function parseBackupJson(text: string, maxBytes = MAX_BACKUP_JSON_BYTES):
     knowledgeEntities: ensureUniqueIds(recordArray(rawData.knowledgeEntities, 'knowledgeEntities', normalizeKnowledgeEntityRecord), 'knowledgeEntities'),
     noteEntityLinks: ensureUniqueIds(recordArray(rawData.noteEntityLinks, 'noteEntityLinks', normalizeNoteEntityLinkRecord), 'noteEntityLinks'),
     knowledgeRelations: ensureUniqueIds(recordArray(rawData.knowledgeRelations, 'knowledgeRelations', normalizeKnowledgeRelationRecord), 'knowledgeRelations'),
+    knowledgeAuditLogs: ensureUniqueIds(recordArray(rawData.knowledgeAuditLogs, 'knowledgeAuditLogs', normalizeKnowledgeAuditLogRecord), 'knowledgeAuditLogs'),
   }
 }

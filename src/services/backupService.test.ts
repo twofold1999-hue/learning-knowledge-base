@@ -19,7 +19,7 @@ const aiResult: AIResult = {
 
 beforeEach(async () => {
   await Promise.all([
-    db.notes.clear(), db.deletedNotes.clear(), db.projects.clear(), db.courses.clear(), db.directories.clear(), db.images.clear(), db.settings.clear(), db.aiResults.clear(), db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.knowledgeRelations.clear(),
+    db.notes.clear(), db.deletedNotes.clear(), db.projects.clear(), db.courses.clear(), db.directories.clear(), db.images.clear(), db.settings.clear(), db.aiResults.clear(), db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.knowledgeRelations.clear(), db.knowledgeAuditLogs.clear(),
   ])
 })
 
@@ -31,7 +31,7 @@ describe('AIResult 备份与恢复', () => {
 
     const backup = await createBackup()
 
-    expect(backup.version).toBe(4)
+    expect(backup.version).toBe(5)
     expect(backup.data.aiResults).toEqual([aiResult])
     expect(backup.counts.aiResults).toBe(1)
     expect(JSON.stringify(backup)).not.toContain('test-secret-api-key')

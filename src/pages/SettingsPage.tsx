@@ -81,7 +81,8 @@ export default function SettingsPage() {
       const report = await importBackup(await file.text())
       const skippedAIResults = report.warnings.filter((warning) => warning.table === 'aiResults')
       const warningText = skippedAIResults.length ? `；跳过 ${skippedAIResults.length} 条 AI 历史（关联笔记不存在）` : ''
-      setStatus(`导入成功：${report.counts.notes} 篇笔记、${report.counts.deletedNotes} 条回收站记录、${report.counts.images} 张图片和 ${report.counts.aiResults} 条 AI 历史${warningText}。正在刷新…`)
+      const auditSummary = `；恢复 ${report.restoredKnowledgeAuditLogs} 条审计记录，跳过 ${report.skippedKnowledgeAuditLogs} 条`
+      setStatus(`导入成功：${report.counts.notes} 篇笔记、${report.counts.deletedNotes} 条回收站记录、${report.counts.images} 张图片和 ${report.counts.aiResults} 条 AI 历史${warningText}${auditSummary}。正在刷新…`)
       setTimeout(() => window.location.reload(), 500)
     } catch (error) {
       setStatus(error instanceof Error ? `导入失败：${error.message}` : '导入失败，请检查文件格式')
@@ -255,7 +256,7 @@ export default function SettingsPage() {
             <input disabled={isBusy} type="file" accept="application/json,.json" onChange={handleImport} style={{ display: 'none' }} />
           </label>
         </div>
-        <p style={{ marginTop: '10px', color: 'var(--faint)', fontSize: '12px', lineHeight: 1.6 }}>完整备份用于以后还原本知识库；iPad 笔记包会生成“一篇笔记一个 .md 文件 + 图片附件”的 ZIP，解压后可放进 iCloud Drive 或 Markdown 笔记软件。完整备份包含笔记、回收站、目录、专题/项目、学习计划、图片和 AI 历史；不会包含 API Key 或 AI 配置。</p>
+        <p style={{ marginTop: '10px', color: 'var(--faint)', fontSize: '12px', lineHeight: 1.6 }}>完整备份用于以后还原本知识库；iPad 笔记包会生成“一篇笔记一个 .md 文件 + 图片附件”的 ZIP，解压后可放进 iCloud Drive 或 Markdown 笔记软件。完整备份包含笔记、回收站、目录、专题/项目、学习计划、图片、AI 历史和知识审计记录；不会包含 API Key 或 AI 配置。</p>
         {status && <div role="status" style={{ marginTop: '12px', color: status.includes('失败') ? 'var(--red)' : 'var(--green)', fontSize: '13px' }}>{status}</div>}
       </section>
       <section className="surface-card settings-card" style={{ marginBottom: '40px' }}>

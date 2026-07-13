@@ -27,7 +27,7 @@ function backupData(overrides: Partial<Record<string, unknown>> = {}) {
 beforeEach(async () => {
   await Promise.all([
     db.notes.clear(), db.deletedNotes.clear(), db.projects.clear(), db.courses.clear(), db.directories.clear(), db.images.clear(), db.settings.clear(), db.aiResults.clear(),
-    db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.knowledgeRelations.clear(),
+    db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.knowledgeRelations.clear(), db.knowledgeAuditLogs.clear(),
   ])
 })
 
@@ -40,7 +40,7 @@ describe('Backup v4 知识模型恢复', () => {
     await db.knowledgeRelations.add(relation)
 
     const backup = await createBackup()
-    expect(backup.version).toBe(4)
+    expect(backup.version).toBe(5)
     expect(backup.counts).toMatchObject({ knowledgeEntities: 2, noteEntityLinks: 1, knowledgeRelations: 1 })
     expect(JSON.stringify(backup)).not.toContain('VITE_DEEPSEEK_API_KEY')
 

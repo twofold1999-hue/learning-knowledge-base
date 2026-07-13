@@ -10,11 +10,11 @@ import { writeLocalBackup } from './localBackupService'
 const now = '2026-07-13T00:00:00.000Z'
 const backup = {
   format: 'learning-knowledge-base' as const,
-  version: 4 as const,
+  version: 5 as const,
   exportedAt: now,
   appVersion: 'test',
-  counts: { notes: 0, deletedNotes: 0, projects: 0, courses: 0, directories: 0, images: 0, aiResults: 0, knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0 },
-  data: { notes: [], deletedNotes: [], projects: [], courses: [], directories: [], images: [], aiResults: [], knowledgeEntities: [], noteEntityLinks: [], knowledgeRelations: [] },
+  counts: { notes: 0, deletedNotes: 0, projects: 0, courses: 0, directories: 0, images: 0, aiResults: 0, knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0, knowledgeAuditLogs: 0 },
+  data: { notes: [], deletedNotes: [], projects: [], courses: [], directories: [], images: [], aiResults: [], knowledgeEntities: [], noteEntityLinks: [], knowledgeRelations: [], knowledgeAuditLogs: [] },
 }
 
 function createDirectoryHarness() {

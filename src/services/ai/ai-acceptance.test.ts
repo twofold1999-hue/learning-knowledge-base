@@ -35,7 +35,7 @@ beforeEach(async () => {
 })
 
 describe('非敏感 AI 使用闭环验收（模拟 DeepSeek 响应）', () => {
-  it('整理、审核写入、知识浏览和 Backup v4 恢复构成完整闭环', async () => {
+  it('整理、审核写入、知识浏览和 Backup v5 恢复构成完整闭环', async () => {
     const record = note()
     await db.notes.add(record)
 
@@ -72,7 +72,7 @@ describe('非敏感 AI 使用闭环验收（模拟 DeepSeek 响应）', () => {
 
     const backup = await createBackup()
     const serialized = JSON.stringify(backup)
-    expect(backup.version).toBe(4)
+    expect(backup.version).toBe(5)
     expect(backup.counts).toMatchObject({ aiResults: 3, knowledgeEntities: 2, noteEntityLinks: 2, knowledgeRelations: 1 })
     expect(serialized).not.toContain('VITE_DEEPSEEK_API_KEY')
     expect(serialized).not.toContain('apiKey')

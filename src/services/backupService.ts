@@ -1,17 +1,17 @@
 import { db } from './db'
 import { assertBackupJsonSize, parseBackupJson, type BackupData } from './dataValidation'
-import type { KnowledgeEntity, KnowledgeRelation } from '../types'
+import type { KnowledgeAuditLog, KnowledgeEntity, KnowledgeRelation } from '../types'
 
 export interface BackupEnvelope {
   format: 'learning-knowledge-base'
-  version: 4
+  version: 5
   exportedAt: string
   appVersion: string
   counts: Record<keyof BackupData, number>
   data: BackupData
 }
 
-type BackupWarningTable = 'notes' | 'deletedNotes' | 'aiResults' | 'knowledgeEntities' | 'noteEntityLinks' | 'knowledgeRelations'
+type BackupWarningTable = 'notes' | 'deletedNotes' | 'aiResults' | 'knowledgeEntities' | 'noteEntityLinks' | 'knowledgeRelations' | 'knowledgeAuditLogs'
 type BackupWarningReason =
   | 'missing_note'
   | 'note_entity_link_note_missing'
@@ -26,6 +26,7 @@ type BackupWarningReason =
   | 'relation_duplicate'
   | 'relation_ai_result_missing'
   | 'relation_evidence_note_missing'
+  | 'knowledge_audit_log_id_conflict'
 
 export interface BackupRestoreWarning {
   table: BackupWarningTable
@@ -43,11 +44,13 @@ export interface BackupImportReport {
   restoredKnowledgeEntities: number
   restoredNoteEntityLinks: number
   restoredKnowledgeRelations: number
+  restoredKnowledgeAuditLogs: number
   skippedNotes: number
   skippedDeletedNotes: number
   skippedKnowledgeEntities: number
   skippedNoteEntityLinks: number
   skippedKnowledgeRelations: number
+  skippedKnowledgeAuditLogs: number
   warnings: BackupRestoreWarning[]
 }
 
@@ -65,6 +68,7 @@ function getBackupCounts(data: BackupData): Record<keyof BackupData, number> {
     knowledgeEntities: data.knowledgeEntities.length,
     noteEntityLinks: data.noteEntityLinks.length,
     knowledgeRelations: data.knowledgeRelations.length,
+    knowledgeAuditLogs: data.knowledgeAuditLogs.length,
   }
 }
 
@@ -87,6 +91,23 @@ function removeEntityFromCanonicalIndex(index: Map<string, Set<string>>, entity:
   if (ids.size === 0) index.delete(key)
 }
 
+function stableAuditValue(value: unknown): string {
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+  if (typeof value === 'string') return `string:${JSON.stringify(value)}`
+  if (typeof value === 'number') return `number:${String(value)}`
+  if (typeof value === 'boolean') return `boolean:${String(value)}`
+  if (Array.isArray(value)) return `array:[${value.map(stableAuditValue).join(',')}]`
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `object:{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableAuditValue(record[key])}`).join(',')}}`
+  }
+  return `${typeof value}:${String(value)}`
+}
+
+function auditLogsEquivalent(left: KnowledgeAuditLog, right: KnowledgeAuditLog): boolean {
+  return stableAuditValue(left) === stableAuditValue(right)
+}
 export function serializeBackup(envelope: BackupEnvelope, maxBytes?: number): string {
   const serialized = JSON.stringify(envelope, null, 2)
   if (typeof serialized !== 'string') throw new Error('备份无法序列化')
@@ -105,11 +126,12 @@ export async function createBackup(): Promise<BackupEnvelope> {
     knowledgeEntities: await db.knowledgeEntities.toArray(),
     noteEntityLinks: await db.noteEntityLinks.toArray(),
     knowledgeRelations: await db.knowledgeRelations.toArray(),
+    knowledgeAuditLogs: await db.knowledgeAuditLogs.toArray(),
   }
 
   return {
     format: 'learning-knowledge-base',
-    version: 4,
+    version: 5,
     exportedAt: new Date().toISOString(),
     appVersion: __APP_VERSION__,
     counts: getBackupCounts(data),
@@ -120,18 +142,19 @@ export async function createBackup(): Promise<BackupEnvelope> {
 export async function importBackup(text: string): Promise<BackupImportReport> {
   const data = parseBackupJson(text)
   const warnings: BackupRestoreWarning[] = []
-  const restored = { knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0 }
-  const skipped = { notes: 0, deletedNotes: 0, knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0 }
+  const restored = { knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0, knowledgeAuditLogs: 0 }
+  const skipped = { notes: 0, deletedNotes: 0, knowledgeEntities: 0, noteEntityLinks: 0, knowledgeRelations: 0, knowledgeAuditLogs: 0 }
   const restoredNotes: BackupData['notes'] = []
   const restoredDeletedNotes: BackupData['deletedNotes'] = []
   const validAIResults: BackupData['aiResults'] = []
   const restoredEntities: BackupData['knowledgeEntities'] = []
   const restoredLinks: BackupData['noteEntityLinks'] = []
   const restoredRelations: BackupData['knowledgeRelations'] = []
+  const restoredAuditLogs: BackupData['knowledgeAuditLogs'] = []
 
   await db.transaction('rw', [
     db.notes, db.deletedNotes, db.directories, db.projects, db.courses, db.images, db.aiResults,
-    db.knowledgeEntities, db.noteEntityLinks, db.knowledgeRelations,
+    db.knowledgeEntities, db.noteEntityLinks, db.knowledgeRelations, db.knowledgeAuditLogs,
   ], async () => {
     // Never move a local note between active and deleted states during a merge.
     for (const note of data.notes) {
@@ -258,7 +281,21 @@ export async function importBackup(text: string): Promise<BackupImportReport> {
       restoredRelations.push(relation)
       restored.knowledgeRelations += 1
     }
-  })
+    const newAuditLogs: KnowledgeAuditLog[] = []
+    for (const auditLog of data.knowledgeAuditLogs) {
+      const existing = await db.knowledgeAuditLogs.get(auditLog.id)
+      if (!existing) {
+        newAuditLogs.push(auditLog)
+        continue
+      }
+      skipped.knowledgeAuditLogs += 1
+      if (!auditLogsEquivalent(existing, auditLog)) {
+        warnings.push({ table: 'knowledgeAuditLogs', recordId: auditLog.id, reason: 'knowledge_audit_log_id_conflict' })
+      }
+    }
+    if (newAuditLogs.length) await db.knowledgeAuditLogs.bulkAdd(newAuditLogs)
+    restoredAuditLogs.push(...newAuditLogs)
+    restored.knowledgeAuditLogs += newAuditLogs.length  })
 
   return {
     counts: getBackupCounts({
@@ -269,15 +306,18 @@ export async function importBackup(text: string): Promise<BackupImportReport> {
       knowledgeEntities: restoredEntities,
       noteEntityLinks: restoredLinks,
       knowledgeRelations: restoredRelations,
+      knowledgeAuditLogs: restoredAuditLogs,
     }),
     restoredKnowledgeEntities: restored.knowledgeEntities,
     restoredNoteEntityLinks: restored.noteEntityLinks,
     restoredKnowledgeRelations: restored.knowledgeRelations,
+    restoredKnowledgeAuditLogs: restored.knowledgeAuditLogs,
     skippedNotes: skipped.notes,
     skippedDeletedNotes: skipped.deletedNotes,
     skippedKnowledgeEntities: skipped.knowledgeEntities,
     skippedNoteEntityLinks: skipped.noteEntityLinks,
     skippedKnowledgeRelations: skipped.knowledgeRelations,
+    skippedKnowledgeAuditLogs: skipped.knowledgeAuditLogs,
     warnings,
   }
 }
