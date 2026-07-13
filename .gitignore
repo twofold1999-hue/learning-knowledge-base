@@ -8,3 +8,44 @@ test-results/
 .env.*
 !.env.example
 src-tauri/target/
+
+# Personal media
+media/*
+!media/.gitkeep
+!media/README.md
+
+# Personal backups and exports
+backups/
+local-backups/
+exports/
+*.lkb-backup.json
+
+# Local databases and browser profiles
+*.db
+*.sqlite
+*.sqlite3
+*.indexeddb
+User Data/
+Browser Profile/
+
+# Local caches and logs
+coverage/
+.vite/
+.cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local IDE files
+.vscode/
+.idea/
+Thumbs.db
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
