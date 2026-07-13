@@ -65,6 +65,18 @@ describe('local server health and runtime lifecycle', () => {
     assert.deepEqual(await readRuntimeState(root), { kind: 'missing' })
   })
 
+  it('can run in test mode without creating or clearing production runtime state', async () => {
+    const root = await makeProjectRoot()
+    await writeRuntimeState(root, { appId: APP_ID, pid: 99, port: 4173, instanceId: 'production-instance', startedAt: '2026-07-13T00:00:00.000Z', serverEntry: 'scripts/local-server.mjs' })
+    const localServer = createLocalServer({ projectRoot: root, port: 0, instanceId: 'e2e-instance', manageRuntimeState: false, openBrowser: () => { throw new Error('test server must not open a browser') } })
+    runningServers.push(localServer)
+    await localServer.start()
+    const health = await request(localServer.port, '/api/health')
+    assert.deepEqual(JSON.parse(health.body), { appId: APP_ID, pid: process.pid, port: localServer.port, instanceId: 'e2e-instance', status: 'running' })
+    await localServer.stop()
+    runningServers.splice(runningServers.indexOf(localServer), 1)
+    assert.deepEqual(await readRuntimeState(root), { kind: 'valid', state: { appId: APP_ID, pid: 99, port: 4173, instanceId: 'production-instance', startedAt: '2026-07-13T00:00:00.000Z', serverEntry: 'scripts/local-server.mjs' } })
+  })
   it('cleans its own runtime state on normal exit', async () => {
     const root = await makeProjectRoot()
     const localServer = createLocalServer({ projectRoot: root, port: 0, instanceId: 'normal-cleanup-instance', openBrowser: () => undefined })
