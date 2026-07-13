@@ -124,23 +124,49 @@ export async function restoreDeletedNote(noteId: string): Promise<Note> {
   })
 }
 
+/**
+ * Removes note-owned records during permanent deletion. The caller must already
+ * own a Dexie read/write transaction covering every table touched here.
+ */
+async function cleanupPermanentlyDeletedNoteData(noteIds: string[]): Promise<void> {
+  const uniqueNoteIds = [...new Set(noteIds.map((id) => id.trim()).filter(Boolean))]
+  if (uniqueNoteIds.length === 0) return
+
+  const [aiResultKeys, noteEntityLinkKeys, evidenceRelations] = await Promise.all([
+    db.aiResults.where('noteId').anyOf(uniqueNoteIds).primaryKeys(),
+    db.noteEntityLinks.where('noteId').anyOf(uniqueNoteIds).primaryKeys(),
+    db.knowledgeRelations.where('evidenceNoteId').anyOf(uniqueNoteIds).toArray(),
+  ])
+
+  if (aiResultKeys.length) await db.aiResults.bulkDelete(aiResultKeys)
+  if (noteEntityLinkKeys.length) await db.noteEntityLinks.bulkDelete(noteEntityLinkKeys)
+
+  // This is lifecycle cleanup, not a knowledge edit: preserve every field other
+  // than the invalid evidence reference and do not append an audit event.
+  const relationUpdates = [...new Map(evidenceRelations.map((relation) => [relation.id, relation])).values()]
+    .map((relation) => ({ ...relation, evidenceNoteId: null }))
+  if (relationUpdates.length) await db.knowledgeRelations.bulkPut(relationUpdates)
+}
+
 export async function permanentlyDeleteNote(noteId: string): Promise<void> {
-  await db.transaction('rw', db.notes, db.deletedNotes, db.images, async () => {
+  await db.transaction('rw', [db.notes, db.deletedNotes, db.images, db.aiResults, db.noteEntityLinks, db.knowledgeRelations], async () => {
     const deletedNote = await db.deletedNotes.get(noteId)
     if (!deletedNote) throw new Error('Deleted note not found')
     const imageIds = getReferencedImageIds(deletedNote.content)
+    await cleanupPermanentlyDeletedNoteData([noteId])
     await db.deletedNotes.delete(noteId)
     await removeUnreferencedImages(imageIds)
   })
 }
 
 export async function emptyTrash(): Promise<number> {
-  return db.transaction('rw', db.notes, db.deletedNotes, db.images, async () => {
+  return db.transaction('rw', [db.notes, db.deletedNotes, db.images, db.aiResults, db.noteEntityLinks, db.knowledgeRelations], async () => {
     const deletedNotes = await db.deletedNotes.toArray()
     const imageIds = new Set<string>()
     for (const note of deletedNotes) {
       for (const imageId of getReferencedImageIds(note.content)) imageIds.add(imageId)
     }
+    await cleanupPermanentlyDeletedNoteData(deletedNotes.map((note) => note.id))
     await db.deletedNotes.clear()
     await removeUnreferencedImages(imageIds)
     return deletedNotes.length
