@@ -84,7 +84,7 @@ describe('知识变更审计', () => {
 
   it('手动笔记关联和关系的删除与状态更新会审计，但删除日志不阻止后续查询', async () => {
     const entity = await createKnowledgeEntity({ canonicalName: '关联实体', type: 'concept' })
-    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 1, source: 'manual' })
+    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 1 })
     const other = await createKnowledgeEntity({ canonicalName: '另一个实体', type: 'concept' })
     const relation = await createRelation({ fromEntityId: entity.id, toEntityId: other.id, relationType: 'depends_on', confidence: 1, source: 'manual' })
     await updateRelationStatus(relation.id, 'rejected')

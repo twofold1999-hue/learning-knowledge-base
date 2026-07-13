@@ -19,7 +19,7 @@ const note: Note = {
 }
 
 beforeEach(async () => {
-  await Promise.all([db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.notes.clear()])
+  await Promise.all([db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.notes.clear(), db.knowledgeAuditLogs.clear()])
 })
 
 describe('knowledgeEntityService', () => {
@@ -40,16 +40,26 @@ describe('knowledgeEntityService', () => {
     await db.notes.add(note)
     const entity = await createKnowledgeEntity({ canonicalName: '编译器', type: 'concept', status: 'approved' })
 
-    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'defines', confidence: 0.92, source: 'manual' })
+    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'defines', confidence: 0.92 })
 
     expect(link).toMatchObject({ noteId: note.id, entityId: entity.id, role: 'defines', confidence: 0.92, source: 'manual' })
     await expect(db.noteEntityLinks.get(link.id)).resolves.toEqual(link)
   })
 
+  it('人工关联入口固定写入 manual 来源及相同审计来源', async () => {
+    await db.notes.add(note)
+    const entity = await createKnowledgeEntity({ canonicalName: '人工关联实体', type: 'concept', status: 'approved' })
+
+    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 0.5, source: 'ai' } as never)
+
+    const [audit] = await db.knowledgeAuditLogs.where('targetId').equals(link.id).toArray()
+    expect(link).toMatchObject({ source: 'manual', confidence: 0.5 })
+    expect(audit).toMatchObject({ source: 'manual', aiResultId: null, noteId: note.id, before: null, after: link })
+  })
   it('只通过显式解除关联来释放受保护实体', async () => {
     await db.notes.add(note)
     const entity = await createKnowledgeEntity({ canonicalName: '待解除关联概念', type: 'concept', status: 'approved' })
-    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 1, source: 'manual' })
+    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 1 })
 
     await expect(deleteNoteEntityLink(link.id)).resolves.toBe(true)
     await expect(db.noteEntityLinks.get(link.id)).resolves.toBeUndefined()
@@ -65,7 +75,7 @@ describe('knowledgeEntityService', () => {
   it('拒绝删除有关联的实体，并保持实体和关联不变', async () => {
     await db.notes.add(note)
     const entity = await createKnowledgeEntity({ canonicalName: '受保护概念', type: 'concept', status: 'approved' })
-    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 1, source: 'manual' })
+    const link = await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 1 })
 
     await expect(deleteKnowledgeEntity(entity.id)).resolves.toMatchObject({ deleted: false, linkCount: 1, relationCount: 0, outgoingRelationCount: 0, incomingRelationCount: 0, noteIds: [note.id], relationIds: [], hasMoreLinks: false, hasMoreRelations: false })
     await expect(getKnowledgeEntity(entity.id)).resolves.toEqual(entity)

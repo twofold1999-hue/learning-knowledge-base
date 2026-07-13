@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from './db'
 import { createAIResult, hashAIResultSource } from './aiResultService'
 import { applyKnowledgeCandidates, discardKnowledgeCandidates, KnowledgeCandidateApplicationError } from './knowledgeCandidateApplicationService'
@@ -19,7 +19,7 @@ async function generatedResult(nextPayload: unknown = payload) {
 }
 
 beforeEach(async () => {
-  await Promise.all([db.notes.clear(), db.aiResults.clear(), db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.knowledgeRelations.clear()])
+  await Promise.all([db.notes.clear(), db.aiResults.clear(), db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.knowledgeRelations.clear(), db.knowledgeAuditLogs.clear()])
   await db.notes.add(note)
 })
 
@@ -34,6 +34,84 @@ describe('知识候选应用事务', () => {
     await expect(db.knowledgeRelations.toArray()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ status: 'approved', source: 'ai', aiResultId: result.id, evidenceNoteId: note.id })]))
   })
 
+  it('原样写入单个 AI 实体候选的置信度，并让审计快照与关联一致', async () => {
+    const result = await generatedResult({ entities: [{ key: 'cpu', canonicalName: 'CPU', aliases: [], type: 'concept', description: '', noteRole: 'defines', confidence: 0.73 }], relations: [] })
+
+    await applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: ['cpu'], selectedRelationKeys: [] })
+
+    const [link] = await db.noteEntityLinks.toArray()
+    const [audit] = await db.knowledgeAuditLogs.where('targetType').equals('note_entity_link').toArray()
+    expect(link).toMatchObject({ source: 'ai', confidence: 0.73 })
+    expect(audit).toMatchObject({ source: 'ai', aiResultId: result.id, noteId: note.id, before: null, after: link })
+  })
+
+  it.each([0, 1])('原样保留 AI 实体候选的边界置信度 %s', async (confidence) => {
+    const result = await generatedResult({ entities: [{ key: `entity-${confidence}`, canonicalName: `边界实体 ${confidence}`, aliases: [], type: 'concept', description: '', noteRole: 'mentions', confidence }], relations: [] })
+
+    await applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: [`entity-${confidence}`], selectedRelationKeys: [] })
+
+    await expect(db.noteEntityLinks.toArray()).resolves.toEqual([expect.objectContaining({ confidence })])
+  })
+
+  it('多个候选匹配同一实体且角色一致时，仅创建最高置信度的一条关联及审计', async () => {
+    await db.knowledgeEntities.add({ id: 'existing_cpu', canonicalName: 'CPU', aliases: [], type: 'concept', status: 'approved', description: '人工实体', createdAt: now, updatedAt: now })
+    const result = await generatedResult({
+      entities: [
+        { key: 'cpu-name', canonicalName: 'CPU', aliases: [], type: 'concept', description: '', noteRole: 'mentions', confidence: 0.4 },
+        { key: 'cpu-alias', canonicalName: '中央处理器', aliases: ['CPU'], type: 'concept', description: '', noteRole: 'mentions', confidence: 0.9 },
+      ],
+      relations: [],
+    })
+
+    await applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: ['cpu-name', 'cpu-alias'], selectedRelationKeys: [] })
+
+    await expect(db.noteEntityLinks.toArray()).resolves.toEqual([expect.objectContaining({ entityId: 'existing_cpu', confidence: 0.9 })])
+    await expect(db.knowledgeAuditLogs.where('targetType').equals('note_entity_link').count()).resolves.toBe(1)
+  })
+
+  it('同一实体的冲突角色会回滚实体、关联、关系和审计写入', async () => {
+    const result = await generatedResult({
+      entities: [
+        { key: 'cpu-one', canonicalName: 'CPU', aliases: [], type: 'concept', description: '', noteRole: 'mentions', confidence: 0.4 },
+        { key: 'cpu-two', canonicalName: '处理器', aliases: ['CPU'], type: 'concept', description: '', noteRole: 'defines', confidence: 0.9 },
+      ],
+      relations: [],
+    })
+
+    await expect(applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: ['cpu-one', 'cpu-two'], selectedRelationKeys: [] })).rejects.toMatchObject({ code: 'CANDIDATE_ENTITY_ROLE_CONFLICT' })
+    await expect(db.knowledgeEntities.count()).resolves.toBe(0)
+    await expect(db.noteEntityLinks.count()).resolves.toBe(0)
+    await expect(db.knowledgeRelations.count()).resolves.toBe(0)
+    await expect(db.knowledgeAuditLogs.count()).resolves.toBe(0)
+    await expect(db.aiResults.get(result.id)).resolves.toMatchObject({ status: 'generated' })
+  })
+
+  it('关联审计写入失败时回滚实体、关联、关系与 AIResult 状态', async () => {
+    const result = await generatedResult({ entities: [{ key: 'cpu', canonicalName: 'CPU', aliases: [], type: 'concept', description: '', noteRole: 'mentions', confidence: 0.73 }], relations: [] })
+    const originalAdd = db.knowledgeAuditLogs.add.bind(db.knowledgeAuditLogs)
+    const spy = vi.spyOn(db.knowledgeAuditLogs, 'add')
+    spy.mockImplementationOnce((record, key) => originalAdd(record, key)).mockRejectedValueOnce(new Error('link audit failed'))
+
+    await expect(applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: ['cpu'], selectedRelationKeys: [] })).rejects.toThrow('link audit failed')
+    spy.mockRestore()
+    await expect(db.knowledgeEntities.count()).resolves.toBe(0)
+    await expect(db.noteEntityLinks.count()).resolves.toBe(0)
+    await expect(db.knowledgeRelations.count()).resolves.toBe(0)
+    await expect(db.knowledgeAuditLogs.count()).resolves.toBe(0)
+    await expect(db.aiResults.get(result.id)).resolves.toMatchObject({ status: 'generated' })
+  })
+
+  it('跳过已有人工关联，不覆盖字段或追加关联审计', async () => {
+    await db.knowledgeEntities.add({ id: 'manual_cpu', canonicalName: 'CPU', aliases: [], type: 'concept', status: 'approved', description: '', createdAt: now, updatedAt: now })
+    await db.noteEntityLinks.add({ id: 'manual_link', noteId: note.id, entityId: 'manual_cpu', role: 'example', confidence: 0.2, source: 'manual', createdAt: now, updatedAt: now })
+    const result = await generatedResult({ entities: [{ key: 'cpu', canonicalName: 'CPU', aliases: [], type: 'concept', description: '', noteRole: 'mentions', confidence: 0.9 }], relations: [] })
+
+    const report = await applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: ['cpu'], selectedRelationKeys: [] })
+
+    expect(report).toMatchObject({ createdNoteEntityLinks: 0, skippedExistingNoteEntityLinks: 1 })
+    await expect(db.noteEntityLinks.get('manual_link')).resolves.toMatchObject({ role: 'example', confidence: 0.2, source: 'manual' })
+    await expect(db.knowledgeAuditLogs.where('targetType').equals('note_entity_link').count()).resolves.toBe(0)
+  })
   it('复用标准名和别名的唯一精确匹配，且不覆盖既有数据', async () => {
     await db.knowledgeEntities.add({ id: 'existing_cpu', canonicalName: '处理器', aliases: ['CPU'], type: 'tool', status: 'approved', description: '人工描述', createdAt: now, updatedAt: now })
     const result = await generatedResult()

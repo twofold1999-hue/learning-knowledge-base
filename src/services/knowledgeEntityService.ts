@@ -6,7 +6,6 @@ import type {
   KnowledgeEntityType,
   NoteEntityLink,
   NoteEntityLinkRole,
-  NoteEntityLinkSource,
 } from '../types'
 
 const REFERENCE_ID_SAMPLE_LIMIT = 20
@@ -32,7 +31,6 @@ export interface CreateNoteEntityLinkInput {
   entityId: string
   role: NoteEntityLinkRole
   confidence: number
-  source: NoteEntityLinkSource
 }
 
 export interface KnowledgeEntityDeleteResult {
@@ -163,7 +161,7 @@ export async function createNoteEntityLink(input: CreateNoteEntityLinkInput): Pr
       entityId: input.entityId,
       role: input.role,
       confidence: validateConfidence(input.confidence),
-      source: input.source,
+      source: 'manual',
       createdAt: now,
       updatedAt: now,
     }

@@ -64,7 +64,7 @@ describe('知识引用完整性', () => {
     await db.notes.add(note)
     const subject = await entity('受保护实体')
     const target = await entity('关系对象')
-    const link = await createNoteEntityLink({ noteId: note.id, entityId: subject.id, role: 'mentions', confidence: 1, source: 'manual' })
+    const link = await createNoteEntityLink({ noteId: note.id, entityId: subject.id, role: 'mentions', confidence: 1 })
     const relation = await createRelation({ fromEntityId: subject.id, toEntityId: target.id, ...manual })
 
     const result = await deleteKnowledgeEntity(subject.id)
@@ -80,7 +80,7 @@ describe('知识引用完整性', () => {
     await db.notes.add(note)
     const subject = await entity('待释放实体')
     const target = await entity('待释放对象')
-    const link = await createNoteEntityLink({ noteId: note.id, entityId: subject.id, role: 'mentions', confidence: 1, source: 'manual' })
+    const link = await createNoteEntityLink({ noteId: note.id, entityId: subject.id, role: 'mentions', confidence: 1 })
     const relation = await createRelation({ fromEntityId: subject.id, toEntityId: target.id, ...manual })
 
     await deleteNoteEntityLink(link.id)

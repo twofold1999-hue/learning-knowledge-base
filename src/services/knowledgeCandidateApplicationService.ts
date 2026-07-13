@@ -126,6 +126,7 @@ export async function applyKnowledgeCandidates(input: ApplyKnowledgeCandidatesIn
     const allEntities = await db.knowledgeEntities.toArray()
     const entityByCandidateKey = new Map<string, KnowledgeEntity>()
     const roleByEntityId = new Map<string, NoteEntityLinkRole>()
+    const confidenceByEntityId = new Map<string, number>()
     const reusedEntityIds = new Set<string>()
     let createdEntities = 0
 
@@ -157,6 +158,7 @@ export async function applyKnowledgeCandidates(input: ApplyKnowledgeCandidatesIn
         throw new KnowledgeCandidateApplicationError('CANDIDATE_ENTITY_ROLE_CONFLICT', `实体「${candidate.canonicalName}」在本次候选中具有冲突的笔记角色。`)
       }
       roleByEntityId.set(entity.id, candidate.noteRole)
+      confidenceByEntityId.set(entity.id, Math.max(confidenceByEntityId.get(entity.id) ?? candidate.confidence, candidate.confidence))
       entityByCandidateKey.set(candidate.key, entity)
     }
 
@@ -169,7 +171,7 @@ export async function applyKnowledgeCandidates(input: ApplyKnowledgeCandidatesIn
         continue
       }
       const now = new Date().toISOString()
-      const link = { id: generateId('note_entity'), noteId: note.id, entityId, role, confidence: 1, source: 'ai' as const, createdAt: now, updatedAt: now }
+      const link = { id: generateId('note_entity'), noteId: note.id, entityId, role, confidence: confidenceByEntityId.get(entityId)!, source: 'ai' as const, createdAt: now, updatedAt: now }
       await db.noteEntityLinks.add(link)
       await appendAuditLog({ targetType: 'note_entity_link', targetId: link.id, action: 'created', source: 'ai', aiResultId: result.id, noteId: note.id, before: null, after: link })
       createdNoteEntityLinks += 1
