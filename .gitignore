@@ -29,6 +29,7 @@ User Data/
 Browser Profile/
 
 # Local caches and logs
+.runtime/
 coverage/
 .vite/
 .cache/

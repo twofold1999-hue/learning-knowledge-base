@@ -23,7 +23,7 @@ if exist "node_modules" (
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$listeners = Get-NetTCPConnection -State Listen -LocalPort 4173 -ErrorAction SilentlyContinue; foreach ($listener in $listeners) { Stop-Process -Id $listener.OwningProcess -Force }"
-
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath node -ArgumentList 'scripts/local-server.mjs' -WorkingDirectory (Get-Location).Path -WindowStyle Minimized"
-exit /b 0
+node scripts/local-server-control.mjs start
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" pause
+exit /b %EXIT_CODE%

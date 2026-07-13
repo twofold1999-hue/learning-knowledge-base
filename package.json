@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc",
-    "test": "vitest run && node --test scripts/local-ai-proxy.test.mjs",
+    "test": "vitest run && node --test scripts/local-ai-proxy.test.mjs scripts/local-server-control.test.mjs scripts/local-server.test.mjs",
     "test:e2e": "playwright test",
     "build": "tsc && vite build",
     "preview": "vite preview",

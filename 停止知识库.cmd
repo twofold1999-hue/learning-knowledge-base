@@ -1,4 +1,15 @@
 @echo off
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$listeners = Get-NetTCPConnection -State Listen -LocalPort 4173 -ErrorAction SilentlyContinue; foreach ($listener in $listeners) { Stop-Process -Id $listener.OwningProcess -Force }"
-echo Knowledge-base local server stopped.
-timeout /t 2 >nul
+setlocal
+cd /d "%~dp0"
+
+where node >nul 2>nul
+if errorlevel 1 (
+  echo Node.js was not found. Unable to verify the local server safely.
+  pause
+  exit /b 1
+)
+
+node scripts/local-server-control.mjs stop
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" pause
+exit /b %EXIT_CODE%
