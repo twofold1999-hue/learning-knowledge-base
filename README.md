@@ -113,6 +113,11 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 ## 开发与测试
 
+### 开发与架构
+
+- [项目开发原则](docs/DEVELOPMENT_PRINCIPLES.md)
+- [知识实体图谱设计](docs/superpowers/specs/2026-07-13-knowledge-entity-graph-design.md)
+
 ```bash
 npm install
 npm run dev          # Vite 开发服务
