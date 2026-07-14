@@ -1,5 +1,6 @@
 import { db, generateId } from './db'
 import { appendAuditLog } from './knowledgeAuditService'
+import { notifyPersistenceCommitted } from './persistenceNotificationService'
 import type { KnowledgeRelation, KnowledgeRelationSource, KnowledgeRelationStatus, KnowledgeRelationType } from '../types'
 import { isSymmetricRelationType } from '../utils/knowledgeRelationSemantics'
 
@@ -42,7 +43,7 @@ function auditActionForStatus(previous: KnowledgeRelationStatus, next: Knowledge
 }
 
 export async function createRelation(input: CreateKnowledgeRelationInput): Promise<KnowledgeRelation> {
-  return db.transaction('rw', [db.knowledgeEntities, db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
+  const relation = await db.transaction('rw', [db.knowledgeEntities, db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
     const { fromEntityId, toEntityId } = normalizeRelationDirection(input)
     if (!await db.knowledgeEntities.get(fromEntityId)) throw new KnowledgeRelationReferenceError('from_entity_missing')
     if (!await db.knowledgeEntities.get(toEntityId)) throw new KnowledgeRelationReferenceError('to_entity_missing')
@@ -54,6 +55,8 @@ export async function createRelation(input: CreateKnowledgeRelationInput): Promi
     await appendAuditLog({ targetType: 'relation', targetId: relation.id, action: 'created', source: 'manual', aiResultId: relation.aiResultId, noteId: relation.evidenceNoteId, before: null, after: relation })
     return relation
   })
+  notifyPersistenceCommitted()
+  return relation
 }
 
 export async function getRelationsByEntity(entityId: string): Promise<KnowledgeRelation[]> {
@@ -62,24 +65,30 @@ export async function getRelationsByEntity(entityId: string): Promise<KnowledgeR
 }
 
 export async function updateRelationStatus(relationId: string, status: KnowledgeRelationStatus): Promise<KnowledgeRelation> {
-  return db.transaction('rw', [db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
+  let changed = false
+  const relation = await db.transaction('rw', [db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
     const current = await db.knowledgeRelations.get(relationId)
     if (!current) throw new Error('知识关系不存在。')
     if (current.status === status) return current
     const updated: KnowledgeRelation = { ...current, status, updatedAt: new Date().toISOString() }
     await db.knowledgeRelations.put(updated)
+    changed = true
     await appendAuditLog({ targetType: 'relation', targetId: relationId, action: auditActionForStatus(current.status, status), source: 'manual', aiResultId: updated.aiResultId, noteId: updated.evidenceNoteId, before: current, after: updated })
     return updated
   })
+  if (changed) notifyPersistenceCommitted()
+  return relation
 }
 
 /** Relations are removable records; deleting one never affects either entity. */
 export async function deleteRelation(relationId: string): Promise<boolean> {
-  return db.transaction('rw', [db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
+  const deleted = await db.transaction('rw', [db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
     const relation = await db.knowledgeRelations.get(relationId)
     if (!relation) return false
     await db.knowledgeRelations.delete(relationId)
     await appendAuditLog({ targetType: 'relation', targetId: relation.id, action: 'deleted', source: 'manual', aiResultId: relation.aiResultId, noteId: relation.evidenceNoteId, before: relation, after: null })
     return true
   })
+  if (deleted) notifyPersistenceCommitted()
+  return deleted
 }

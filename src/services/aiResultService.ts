@@ -1,4 +1,5 @@
 import { db, generateId } from './db'
+import { notifyPersistenceCommitted } from './persistenceNotificationService'
 import type { AIResult, AIResultCreateInput, AIResultStatus } from '../types'
 
 /** Stable local version marker for detecting whether an AI result matches a note body. */
@@ -26,6 +27,7 @@ export async function createAIResult(input: AIResultCreateInput): Promise<AIResu
     updatedAt: now,
   }
   await db.aiResults.add(result)
+  notifyPersistenceCommitted()
   return result
 }
 
@@ -39,6 +41,7 @@ export async function updateAIResultStatus(resultId: string, status: AIResultSta
   if (!updated) throw new Error('AI 结果不存在。')
   const result = await db.aiResults.get(resultId)
   if (!result) throw new Error('AI 结果不存在。')
+  notifyPersistenceCommitted()
   return result
 }
 
@@ -70,6 +73,9 @@ export function isAIResultStale(result: AIResult, currentContent: string): boole
 
 export async function deleteAIResultsByNoteId(noteId: string): Promise<number> {
   const keys = await db.aiResults.where('noteId').equals(noteId).primaryKeys()
-  if (keys.length) await db.aiResults.bulkDelete(keys)
+  if (keys.length) {
+    await db.aiResults.bulkDelete(keys)
+    notifyPersistenceCommitted()
+  }
   return keys.length
 }

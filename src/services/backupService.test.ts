@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBackup, importBackup, serializeBackup } from './backupService'
 import { db } from './db'
 import { BackupTooLargeError, getUtf8ByteLength } from './dataValidation'
@@ -24,6 +24,34 @@ beforeEach(async () => {
 })
 
 describe('AIResult 备份与恢复', () => {
+  it('在单个 readonly Dexie transaction 中读取完整备份快照', async () => {
+    const transactionSpy = vi.spyOn(db, 'transaction')
+
+    const backup = await createBackup()
+
+    expect(transactionSpy).toHaveBeenCalledWith(
+      'r',
+      [
+        db.notes, db.deletedNotes, db.projects, db.courses, db.directories,
+        db.images, db.aiResults, db.knowledgeEntities, db.noteEntityLinks,
+        db.knowledgeRelations, db.knowledgeAuditLogs,
+      ],
+      expect.any(Function),
+    )
+    expect(backup.data).toEqual({
+      notes: [], deletedNotes: [], projects: [], courses: [], directories: [],
+      images: [], aiResults: [], knowledgeEntities: [], noteEntityLinks: [],
+      knowledgeRelations: [], knowledgeAuditLogs: [],
+    })
+  })
+
+  it('传播 readonly 快照读取失败，而不返回部分备份', async () => {
+    const readError = new Error('notes read failed')
+    const notesSpy = vi.spyOn(db.notes, 'toArray').mockRejectedValueOnce(readError)
+
+    await expect(createBackup()).rejects.toBe(readError)
+    notesSpy.mockRestore()
+  })
   it('导出 AIResult，但不导出 API Key 或设置', async () => {
     await db.notes.add(note)
     await db.aiResults.add(aiResult)

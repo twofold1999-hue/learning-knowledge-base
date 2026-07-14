@@ -5,7 +5,7 @@ import { db } from './db'
 const mocks = vi.hoisted(() => ({ createBackup: vi.fn(), serializeBackup: vi.fn() }))
 vi.mock('./backupService', () => ({ createBackup: mocks.createBackup, serializeBackup: mocks.serializeBackup }))
 
-import { writeLocalBackup } from './localBackupService'
+import { scheduleLocalBackup, writeLocalBackup } from './localBackupService'
 
 const now = '2026-07-13T00:00:00.000Z'
 const backup = {
@@ -44,9 +44,22 @@ beforeEach(async () => {
   vi.clearAllMocks()
 })
 
-afterEach(() => { vi.restoreAllMocks() })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('writeLocalBackup', () => {
+  it('连续持久化通知只调度一次实际本地备份', async () => {
+    vi.useFakeTimers()
+    const harness = createDirectoryHarness()
+    vi.spyOn(db.settings, 'get').mockResolvedValue({ key: 'local-backup-directory-v1', value: harness.directory, updatedAt: now })
+    mocks.createBackup.mockResolvedValue(backup)
+    mocks.serializeBackup.mockReturnValue('{"backup":true}')
+
+    scheduleLocalBackup()
+    scheduleLocalBackup()
+    await vi.advanceTimersByTimeAsync(1_500)
+
+    expect(mocks.createBackup).toHaveBeenCalledTimes(1)
+  })
   it('超限时将安全错误返回调用方且绝不触碰已有备份文件', async () => {
     const harness = createDirectoryHarness()
     vi.spyOn(db.settings, 'get').mockResolvedValue({ key: 'local-backup-directory-v1', value: harness.directory, updatedAt: now })

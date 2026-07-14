@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from './db'
 import { createKnowledgeEntity } from './knowledgeEntityService'
 import { createRelation, deleteRelation, getRelationsByEntity, updateRelationStatus } from './knowledgeRelationService'
+
+const persistenceMocks = vi.hoisted(() => ({ notifyPersistenceCommitted: vi.fn() }))
+vi.mock('./persistenceNotificationService', () => ({ notifyPersistenceCommitted: persistenceMocks.notifyPersistenceCommitted }))
 
 async function createEntity(name: string) {
   return createKnowledgeEntity({ canonicalName: name, type: 'concept', status: 'approved' })
@@ -12,6 +15,18 @@ beforeEach(async () => {
 })
 
 describe('knowledgeRelationService', () => {
+  it('关系创建和状态更新提交后通知本地备份', async () => {
+    const from = await createEntity('通知起点')
+    const to = await createEntity('通知终点')
+    persistenceMocks.notifyPersistenceCommitted.mockClear()
+
+    const relation = await createRelation({ fromEntityId: from.id, toEntityId: to.id, relationType: 'explains', confidence: 0.9, source: 'manual' })
+    expect(persistenceMocks.notifyPersistenceCommitted).toHaveBeenCalledTimes(1)
+
+    persistenceMocks.notifyPersistenceCommitted.mockClear()
+    await updateRelationStatus(relation.id, 'approved')
+    expect(persistenceMocks.notifyPersistenceCommitted).toHaveBeenCalledTimes(1)
+  })
   it('创建关系并保存 AI 溯源字段', async () => {
     const from = await createEntity('编译器')
     const to = await createEntity('抽象语法树')

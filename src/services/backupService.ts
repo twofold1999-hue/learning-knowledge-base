@@ -114,19 +114,27 @@ export function serializeBackup(envelope: BackupEnvelope, maxBytes?: number): st
   return serialized
 }
 export async function createBackup(): Promise<BackupEnvelope> {
-  const data: BackupData = {
-    notes: await db.notes.toArray(),
-    deletedNotes: await db.deletedNotes.toArray(),
-    projects: await db.projects.toArray(),
-    courses: await db.courses.toArray(),
-    directories: await db.directories.toArray(),
-    images: await db.images.toArray(),
-    aiResults: await db.aiResults.toArray(),
-    knowledgeEntities: await db.knowledgeEntities.toArray(),
-    noteEntityLinks: await db.noteEntityLinks.toArray(),
-    knowledgeRelations: await db.knowledgeRelations.toArray(),
-    knowledgeAuditLogs: await db.knowledgeAuditLogs.toArray(),
-  }
+  const data = await db.transaction(
+    'r',
+    [
+      db.notes, db.deletedNotes, db.projects, db.courses, db.directories,
+      db.images, db.aiResults, db.knowledgeEntities, db.noteEntityLinks,
+      db.knowledgeRelations, db.knowledgeAuditLogs,
+    ],
+    async (): Promise<BackupData> => ({
+      notes: await db.notes.toArray(),
+      deletedNotes: await db.deletedNotes.toArray(),
+      projects: await db.projects.toArray(),
+      courses: await db.courses.toArray(),
+      directories: await db.directories.toArray(),
+      images: await db.images.toArray(),
+      aiResults: await db.aiResults.toArray(),
+      knowledgeEntities: await db.knowledgeEntities.toArray(),
+      noteEntityLinks: await db.noteEntityLinks.toArray(),
+      knowledgeRelations: await db.knowledgeRelations.toArray(),
+      knowledgeAuditLogs: await db.knowledgeAuditLogs.toArray(),
+    }),
+  )
 
   return {
     format: 'learning-knowledge-base',

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from './db'
 import {
   createKnowledgeEntity,
@@ -11,6 +11,9 @@ import {
 } from './knowledgeEntityService'
 import type { Note } from '../types'
 
+const persistenceMocks = vi.hoisted(() => ({ notifyPersistenceCommitted: vi.fn() }))
+vi.mock('./persistenceNotificationService', () => ({ notifyPersistenceCommitted: persistenceMocks.notifyPersistenceCommitted }))
+
 const now = '2026-07-12T00:00:00.000Z'
 const note: Note = {
   id: 'note_1', type: 'knowledge_fragment', title: '实体测试笔记', content: '', tags: [], relatedConcepts: [],
@@ -19,10 +22,21 @@ const note: Note = {
 }
 
 beforeEach(async () => {
+  vi.clearAllMocks()
   await Promise.all([db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.notes.clear(), db.knowledgeAuditLogs.clear()])
 })
 
 describe('knowledgeEntityService', () => {
+  it('实体及笔记实体关联提交后通知本地备份', async () => {
+    const entity = await createKnowledgeEntity({ canonicalName: '备份通知实体', type: 'concept' })
+    expect(persistenceMocks.notifyPersistenceCommitted).toHaveBeenCalledTimes(1)
+
+    persistenceMocks.notifyPersistenceCommitted.mockClear()
+    await db.notes.add(note)
+    await createNoteEntityLink({ noteId: note.id, entityId: entity.id, role: 'mentions', confidence: 0.8 })
+
+    expect(persistenceMocks.notifyPersistenceCommitted).toHaveBeenCalledTimes(1)
+  })
   it('创建、查询、更新并按名称或别名检索实体', async () => {
     const created = await createKnowledgeEntity({
       canonicalName: 'TypeScript', aliases: ['TS', 'typescript'], type: 'tool', status: 'approved', description: 'JavaScript 的类型化超集',

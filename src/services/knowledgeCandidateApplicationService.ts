@@ -1,6 +1,7 @@
 import { db, generateId } from './db'
 import { hashAIResultSource } from './aiResultService'
 import { appendAuditLog } from './knowledgeAuditService'
+import { notifyPersistenceCommitted } from './persistenceNotificationService'
 import { parseKnowledgeCandidatesPayload } from './ai/knowledge-candidates'
 import type { AIKnowledgeEntityCandidate, AIKnowledgeRelationCandidate } from './ai/types'
 import type { AIResult, KnowledgeEntity, KnowledgeRelation, NoteEntityLinkRole } from '../types'
@@ -108,7 +109,7 @@ function assertSelection(
 }
 
 export async function applyKnowledgeCandidates(input: ApplyKnowledgeCandidatesInput, currentContent?: string): Promise<ApplyKnowledgeCandidatesReport> {
-  return db.transaction('rw', [db.notes, db.aiResults, db.knowledgeEntities, db.noteEntityLinks, db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
+  const report = await db.transaction('rw', [db.notes, db.aiResults, db.knowledgeEntities, db.noteEntityLinks, db.knowledgeRelations, db.knowledgeAuditLogs], async (): Promise<ApplyKnowledgeCandidatesReport> => {
     const note = await db.notes.get(input.noteId)
     if (!note) throw new KnowledgeCandidateApplicationError('NOTE_NOT_FOUND', '当前笔记不存在或已被删除。')
     const result = assertGeneratedKnowledgeResult(await db.aiResults.get(input.aiResultId), input.noteId)
@@ -224,10 +225,12 @@ export async function applyKnowledgeCandidates(input: ApplyKnowledgeCandidatesIn
       aiResultId: result.id,
     }
   })
+  notifyPersistenceCommitted()
+  return report
 }
 
 export async function discardKnowledgeCandidates(input: Pick<ApplyKnowledgeCandidatesInput, 'noteId' | 'aiResultId'>) {
-  return db.transaction('rw', db.aiResults, async () => {
+  const discarded = await db.transaction('rw', db.aiResults, async () => {
     const result = assertGeneratedKnowledgeResult(await db.aiResults.get(input.aiResultId), input.noteId)
     const now = new Date().toISOString()
     const updated = await db.aiResults.update(result.id, { status: 'discarded', updatedAt: now })
@@ -236,4 +239,6 @@ export async function discardKnowledgeCandidates(input: Pick<ApplyKnowledgeCandi
     if (!discarded) throw new KnowledgeCandidateApplicationError('AI_RESULT_NOT_FOUND', 'AI 候选结果不存在。')
     return discarded
   })
+  notifyPersistenceCommitted()
+  return discarded
 }

@@ -4,6 +4,9 @@ import { createAIResult, hashAIResultSource } from './aiResultService'
 import { AIResultApplicationError, applyAIResult } from './aiResultApplicationService'
 import type { Note } from '../types'
 
+const persistenceMocks = vi.hoisted(() => ({ notifyPersistenceCommitted: vi.fn() }))
+vi.mock('./persistenceNotificationService', () => ({ notifyPersistenceCommitted: persistenceMocks.notifyPersistenceCommitted }))
+
 const now = '2026-07-14T00:00:00.000Z'
 const note: Note = {
   id: 'note_ai_summary',
@@ -42,12 +45,14 @@ beforeEach(async () => {
 describe('AI 整理结果应用事务', () => {
   it('原子地更新笔记正文并将 AIResult 标记为 applied', async () => {
     const result = await createSummaryResult()
+    persistenceMocks.notifyPersistenceCommitted.mockClear()
 
     const applied = await applyAIResult(result.id)
 
     expect(applied).toMatchObject({ applied: true, aiResultId: result.id, note: { id: note.id, content: '## AI 整理结果\n\n结构化正文。' } })
     await expect(db.notes.get(note.id)).resolves.toMatchObject({ content: '## AI 整理结果\n\n结构化正文。' })
     await expect(db.aiResults.get(result.id)).resolves.toMatchObject({ status: 'applied', appliedAt: expect.any(String) })
+    expect(persistenceMocks.notifyPersistenceCommitted).toHaveBeenCalledTimes(1)
   })
 
   it('拒绝不存在的 AIResult，且不修改笔记', async () => {
@@ -88,6 +93,7 @@ describe('AI 整理结果应用事务', () => {
 
   it('AIResult 状态写入失败时回滚已写入的笔记正文', async () => {
     const result = await createSummaryResult()
+    persistenceMocks.notifyPersistenceCommitted.mockClear()
     const updateSpy = vi.spyOn(db.aiResults, 'update').mockRejectedValueOnce(new Error('AIResult write failed'))
 
     await expect(applyAIResult(result.id)).rejects.toThrow('AIResult write failed')
@@ -95,6 +101,7 @@ describe('AI 整理结果应用事务', () => {
 
     await expect(db.notes.get(note.id)).resolves.toMatchObject({ content: note.content })
     await expect(db.aiResults.get(result.id)).resolves.toMatchObject({ status: 'generated' })
+    expect(persistenceMocks.notifyPersistenceCommitted).not.toHaveBeenCalled()
   })
 
   it('对非 summary 结果拒绝写入，且保留原始状态', async () => {

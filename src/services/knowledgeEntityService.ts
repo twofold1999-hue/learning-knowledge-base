@@ -1,5 +1,6 @@
 import { db, generateId } from './db'
 import { appendAuditLog } from './knowledgeAuditService'
+import { notifyPersistenceCommitted } from './persistenceNotificationService'
 import type {
   KnowledgeEntity,
   KnowledgeEntityStatus,
@@ -91,7 +92,7 @@ function recordsEqual(left: unknown, right: unknown): boolean {
 }
 
 export async function createKnowledgeEntity(input: CreateKnowledgeEntityInput): Promise<KnowledgeEntity> {
-  return db.transaction('rw', [db.knowledgeEntities, db.knowledgeAuditLogs], async () => {
+  const entity = await db.transaction('rw', [db.knowledgeEntities, db.knowledgeAuditLogs], async () => {
     const canonicalName = normalizeName(input.canonicalName, '实体名称')
     await ensureCanonicalNameAvailable(canonicalName)
     const now = new Date().toISOString()
@@ -109,6 +110,8 @@ export async function createKnowledgeEntity(input: CreateKnowledgeEntityInput): 
     await appendAuditLog({ targetType: 'entity', targetId: entity.id, action: 'created', source: 'manual', before: null, after: entity })
     return entity
   })
+  notifyPersistenceCommitted()
+  return entity
 }
 
 export function getKnowledgeEntity(entityId: string): Promise<KnowledgeEntity | undefined> {
@@ -116,7 +119,8 @@ export function getKnowledgeEntity(entityId: string): Promise<KnowledgeEntity | 
 }
 
 export async function updateKnowledgeEntity(entityId: string, input: UpdateKnowledgeEntityInput): Promise<KnowledgeEntity> {
-  return db.transaction('rw', [db.knowledgeEntities, db.knowledgeAuditLogs], async () => {
+  let changed = false
+  const entity = await db.transaction('rw', [db.knowledgeEntities, db.knowledgeAuditLogs], async () => {
     const current = await db.knowledgeEntities.get(entityId)
     if (!current) throw new Error('知识实体不存在。')
     const canonicalName = input.canonicalName === undefined ? current.canonicalName : normalizeName(input.canonicalName, '实体名称')
@@ -134,9 +138,12 @@ export async function updateKnowledgeEntity(entityId: string, input: UpdateKnowl
     const comparableNext = { ...next, updatedAt: '' }
     if (recordsEqual(comparableCurrent, comparableNext)) return current
     await db.knowledgeEntities.put(next)
+    changed = true
     await appendAuditLog({ targetType: 'entity', targetId: entityId, action: auditActionForStatus(current.status, next.status), source: 'manual', before: current, after: next })
     return next
   })
+  if (changed) notifyPersistenceCommitted()
+  return entity
 }
 
 export async function searchKnowledgeEntitiesByName(query: string): Promise<KnowledgeEntity[]> {
@@ -148,7 +155,7 @@ export async function searchKnowledgeEntitiesByName(query: string): Promise<Know
 }
 
 export async function createNoteEntityLink(input: CreateNoteEntityLinkInput): Promise<NoteEntityLink> {
-  return db.transaction('rw', [db.notes, db.knowledgeEntities, db.noteEntityLinks, db.knowledgeAuditLogs], async () => {
+  const link = await db.transaction('rw', [db.notes, db.knowledgeEntities, db.noteEntityLinks, db.knowledgeAuditLogs], async () => {
     if (!input.noteId.trim() || !input.entityId.trim()) throw new Error('笔记和知识实体不能为空。')
     if (!await db.notes.get(input.noteId)) throw new Error('关联笔记不存在。')
     if (!await db.knowledgeEntities.get(input.entityId)) throw new Error('关联知识实体不存在。')
@@ -169,21 +176,26 @@ export async function createNoteEntityLink(input: CreateNoteEntityLinkInput): Pr
     await appendAuditLog({ targetType: 'note_entity_link', targetId: link.id, action: 'created', source: 'manual', noteId: link.noteId, before: null, after: link })
     return link
   })
+  notifyPersistenceCommitted()
+  return link
 }
 
 /** Explicitly removes a note-to-entity association; entities are never cascade-deleted. */
 export async function deleteNoteEntityLink(linkId: string): Promise<boolean> {
-  return db.transaction('rw', [db.noteEntityLinks, db.knowledgeAuditLogs], async () => {
+  const deleted = await db.transaction('rw', [db.noteEntityLinks, db.knowledgeAuditLogs], async () => {
     const link = await db.noteEntityLinks.get(linkId)
     if (!link) return false
     await db.noteEntityLinks.delete(linkId)
     await appendAuditLog({ targetType: 'note_entity_link', targetId: link.id, action: 'deleted', source: 'manual', noteId: link.noteId, before: link, after: null })
     return true
   })
+  if (deleted) notifyPersistenceCommitted()
+  return deleted
 }
 
 export async function deleteKnowledgeEntity(entityId: string): Promise<KnowledgeEntityDeleteResult> {
-  return db.transaction('rw', [db.knowledgeEntities, db.noteEntityLinks, db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
+  let deletedEntity = false
+  const deletion = await db.transaction('rw', [db.knowledgeEntities, db.noteEntityLinks, db.knowledgeRelations, db.knowledgeAuditLogs], async () => {
     const entity = await db.knowledgeEntities.get(entityId)
     const [links, outgoingRelations, incomingRelations] = await Promise.all([
       db.noteEntityLinks.where('entityId').equals(entityId).toArray(),
@@ -204,7 +216,10 @@ export async function deleteKnowledgeEntity(entityId: string): Promise<Knowledge
       }
     }
     await db.knowledgeEntities.delete(entityId)
+    deletedEntity = Boolean(entity)
     if (entity) await appendAuditLog({ targetType: 'entity', targetId: entity.id, action: 'deleted', source: 'manual', before: entity, after: null })
     return { deleted: true, linkCount: 0, relationCount: 0, outgoingRelationCount: 0, incomingRelationCount: 0, noteIds: [], relationIds: [], hasMoreLinks: false, hasMoreRelations: false }
   })
+  if (deletedEntity) notifyPersistenceCommitted()
+  return deletion
 }

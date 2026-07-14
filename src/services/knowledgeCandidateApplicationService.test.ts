@@ -4,6 +4,9 @@ import { createAIResult, hashAIResultSource } from './aiResultService'
 import { applyKnowledgeCandidates, discardKnowledgeCandidates, KnowledgeCandidateApplicationError } from './knowledgeCandidateApplicationService'
 import type { Note } from '../types'
 
+const persistenceMocks = vi.hoisted(() => ({ notifyPersistenceCommitted: vi.fn() }))
+vi.mock('./persistenceNotificationService', () => ({ notifyPersistenceCommitted: persistenceMocks.notifyPersistenceCommitted }))
+
 const now = '2026-07-12T00:00:00.000Z'
 const note: Note = { id: 'note_candidates', type: 'knowledge_fragment', title: '候选测试', content: '# CPU\nCPU 与缓存。', tags: [], relatedConcepts: [], directoryId: null, projectId: null, courseId: null, chapterOrder: null, sourceLocation: null, mediaUrl: null, videoTimestamp: null, createdAt: now, updatedAt: now }
 const payload = {
@@ -19,11 +22,20 @@ async function generatedResult(nextPayload: unknown = payload) {
 }
 
 beforeEach(async () => {
+  vi.clearAllMocks()
   await Promise.all([db.notes.clear(), db.aiResults.clear(), db.knowledgeEntities.clear(), db.noteEntityLinks.clear(), db.knowledgeRelations.clear(), db.knowledgeAuditLogs.clear()])
   await db.notes.add(note)
 })
 
 describe('知识候选应用事务', () => {
+  it('成功应用候选后只在事务提交后通知一次本地备份', async () => {
+    const result = await generatedResult()
+    persistenceMocks.notifyPersistenceCommitted.mockClear()
+
+    await applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: ['cpu', 'cache'], selectedRelationKeys: ['cpu|explains|cache'] })
+
+    expect(persistenceMocks.notifyPersistenceCommitted).toHaveBeenCalledTimes(1)
+  })
   it('以持久化 AIResult 为唯一来源，创建已确认实体、关联和关系', async () => {
     const result = await generatedResult()
     const report = await applyKnowledgeCandidates({ noteId: note.id, aiResultId: result.id, selectedEntityKeys: ['cpu', 'cache'], selectedRelationKeys: ['cpu|explains|cache'] })
