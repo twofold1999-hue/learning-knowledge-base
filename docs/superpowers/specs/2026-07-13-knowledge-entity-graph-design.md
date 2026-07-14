@@ -2,7 +2,7 @@
 
 ## 目的与范围
 
-本设计为现有知识库规划笔记图谱和实体图谱双模式。它只定义后续实施边界，不实现功能、不新增依赖、不修改数据库、备份或现有笔记图谱。
+本设计记录现有知识库的笔记图谱和实体图谱双模式边界。实体图谱首版已经实现为只读知识关系可视化；本文档不扩大其产品承诺，也不要求修改数据库、备份或现有笔记图谱。
 
 ## 产品范围与已确认决策
 
@@ -10,8 +10,8 @@
 - `/graph` 提供笔记图谱和实体图谱两种模式。
 - 不记录上一次模式选择：不写入 Dexie、AppSetting、localStorage、URL 参数或 Zustand 全局状态。
 - 笔记图谱继续展示笔记节点与 `[[双链]]` 关系，保留标签筛选、悬停高亮和点击进入 `/editor/:noteId` 的行为。
-- 实体图谱首版严格只读：允许搜索、筛选、悬停高亮和点击；不允许创建、修改、删除或审批实体、关系。
-- 点击实体节点进入稳定 ID 路由 `/knowledge/entities/:entityId`。
+- 实体图谱首版严格只读：支持搜索、实体类型筛选和关系类型筛选；不允许创建、修改、删除或审批实体、关系。
+- 实体节点当前用于阅读关系网络，不承担详情路由入口。
 
 ## 实体图谱可信数据范围
 
@@ -62,9 +62,7 @@ EntityGraphView
 9. EntityGraphView 将图构建结果传给 forceLayoutAdapter 生成坐标。
 10. EntityGraphView 将布局结果交给 React Flow 渲染；React Flow 不拥有业务筛选规则。
 
-搜索和筛选必须发生在 300 节点截断前，因此低连接实体仍可被精确搜索找到。超过限制时不修改数据库、不删除记录，并显示非阻塞提示：
-
-> 当前筛选结果共 527 个实体，图谱优先展示连接数最高的 300 个。请使用搜索或筛选缩小范围。
+搜索和筛选必须发生在 300 节点截断前，因此低连接实体仍可被精确搜索找到。超过限制时不修改数据库、不删除记录；首版只保证内部稳定截断，不承诺额外的用户提示。
 
 ### approved 过滤的两层职责
 
@@ -91,41 +89,41 @@ forceLayoutAdapter 只计算坐标；buildEntityGraph 不计算坐标，entityGr
 ## 推荐模块与职责
 
 ~~~text
-src/features/graph/
-├── GraphPage.tsx
-├── note-graph/
-│   ├── NoteGraphView.tsx
-│   ├── buildNoteGraph.ts
-│   └── buildNoteGraph.test.ts
-├── entity-graph/
-│   ├── EntityGraphView.tsx
-│   ├── entityGraphService.ts
-│   ├── entityGraphService.test.ts
-│   ├── buildEntityGraph.ts
-│   ├── buildEntityGraph.test.ts
-│   ├── forceLayoutAdapter.ts
-│   └── forceLayoutAdapter.test.ts
-└── shared/
-    └── 仅放已经出现真实重复的能力
+src/
+├── pages/
+│   └── GraphPage.tsx
+└── features/
+    └── graph/
+        ├── note-graph/
+        │   ├── NoteGraphView.tsx
+        │   ├── buildNoteGraph.ts
+        │   └── buildNoteGraph.test.ts
+        └── entity-graph/
+            ├── EntityGraphView.tsx
+            ├── entityGraphService.ts
+            ├── entityGraphService.test.ts
+            ├── buildEntityGraph.ts
+            ├── buildEntityGraph.test.ts
+            ├── forceLayoutAdapter.ts
+            └── forceLayoutAdapter.test.ts
 ~~~
 
 实施时应以现有目录结构为准做最小必要调整：GraphPage 只负责模式切换与公共框架；NoteGraphView 只负责笔记图谱；EntityGraphView 管理实体图谱局部交互状态；entityGraphService 只读数据库；buildEntityGraph 只做纯筛选、排序、截断和边清理；forceLayoutAdapter 只做坐标；React Flow 只做画布渲染。不得继续把全部逻辑堆入现有 GraphPage。
 
-## 实体图谱交互
+## 实体图谱首版交互
 
-顶部包含返回、页面标题、笔记图谱/实体图谱切换、实体名称搜索、实体类型筛选、关系类型筛选、节点数和关系数。
+`/graph` 顶部提供笔记图谱/实体图谱模式切换。进入实体图谱后，页面提供实体名称搜索、实体类型筛选、关系类型筛选以及当前节点和连接数量；刷新页面后始终回到笔记图谱模式。
 
-实体节点只展示 canonicalName、实体类型和直接连接数；不展示长描述、完整别名、审计历史、AI 结果或关联笔记详情。
+实体节点首版只展示 canonicalName，并以实体类型区分视觉颜色；不展示长描述、完整别名、审计历史、AI 结果、关联笔记详情、实体类型文字或直接连接数。`depends_on`、`contains`、`explains`、`prerequisite` 显示单向箭头；`related_to`、`contrasts_with` 不显示双向箭头，并显示简短中文关系标签。
 
-悬停节点时，当前节点、直接相邻节点与相邻边高亮，其他节点与边降低透明度；离开后恢复。`depends_on`、`contains`、`explains`、`prerequisite` 显示方向；`related_to`、`contrasts_with` 不强调方向。边默认显示简短中文关系标签。
+实体详情导航、悬浮邻接高亮、节点详细信息面板属于未来交互增强，必须在单独任务中确定体验、测试和范围后才可加入。
 
 ## 页面状态
 
 - loading：正在加载知识实体图谱……
 - error：显示可理解错误和重新加载按钮，且可切回笔记图谱。
-- empty：还没有已确认的知识实体。
-- filtered_empty：没有符合当前筛选条件的实体，并提供清除筛选。
-- truncated：显示 300 节点提示但不阻止图谱使用。
+- empty：当前没有可展示的已确认实体，或当前筛选条件没有匹配结果；首版使用统一空状态，不提供清除筛选按钮。
+- truncated：内部稳定限制为最多 300 个节点；首版不提供截断提示 UI。
 
 切离实体图谱或组件卸载时必须忽略过期异步结果。实体图谱错误不得影响笔记图谱。
 
@@ -145,7 +143,7 @@ src/features/graph/
 
 ### 组件与 E2E
 
-组件覆盖 `/graph` 默认笔记图谱、切换后才读取实体数据、loading/error/empty/filtered_empty/truncated、三类筛选、悬停、实体详情导航和切回笔记图谱。生产 E2E 覆盖直接访问 `/graph`、默认笔记图谱、切换实体图谱、搜索、点击实体进入详情路由并刷新；300 节点排序由单元测试承担。
+组件覆盖 `/graph` 默认笔记图谱、切换后才读取实体数据、loading/error/empty、三类筛选、关系方向标记和切回笔记图谱。生产 E2E 覆盖直接访问 `/graph`、默认笔记图谱、切换实体图谱、approved-only 数据范围、刷新后回到默认模式及切回笔记图谱；300 节点排序由单元测试承担。
 
 ## 可删除性边界
 
