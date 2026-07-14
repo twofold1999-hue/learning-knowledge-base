@@ -1,5 +1,6 @@
 import { db } from './db'
 import type { DeletedNote, KnowledgeAuditLog, KnowledgeEntity, KnowledgeRelation, Note, NoteEntityLink } from '../types'
+import { isSymmetricRelationType } from '../utils/knowledgeRelationSemantics'
 
 export interface KnowledgeEntityDetailLinkedNote {
   noteId: string
@@ -36,9 +37,6 @@ function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))]
 }
 
-function isSymmetric(relation: KnowledgeRelation): boolean {
-  return relation.relationType === 'related_to' || relation.relationType === 'contrasts_with'
-}
 
 function auditSort(left: KnowledgeAuditLog, right: KnowledgeAuditLog): number {
   return right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
@@ -119,7 +117,7 @@ export async function getKnowledgeEntityDetail(entityId: string): Promise<Knowle
         fromEntity,
         toEntity,
         otherEntity,
-        currentRole: isSymmetric(relation) ? 'bidirectional' : relation.fromEntityId === entityId ? 'from' : 'to',
+        currentRole: isSymmetricRelationType(relation.relationType) ? 'bidirectional' : relation.fromEntityId === entityId ? 'from' : 'to',
         evidenceNote: evidence,
       }
     })

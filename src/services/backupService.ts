@@ -1,6 +1,7 @@
 import { db } from './db'
 import { assertBackupJsonSize, parseBackupJson, type BackupData } from './dataValidation'
 import type { KnowledgeAuditLog, KnowledgeEntity, KnowledgeRelation } from '../types'
+import { isSymmetricRelationType } from '../utils/knowledgeRelationSemantics'
 
 export interface BackupEnvelope {
   format: 'learning-knowledge-base'
@@ -53,8 +54,6 @@ export interface BackupImportReport {
   skippedKnowledgeAuditLogs: number
   warnings: BackupRestoreWarning[]
 }
-
-const SYMMETRIC_RELATION_TYPES = new Set<KnowledgeRelation['relationType']>(['related_to', 'contrasts_with'])
 
 function getBackupCounts(data: BackupData): Record<keyof BackupData, number> {
   return {
@@ -323,7 +322,7 @@ export async function importBackup(text: string): Promise<BackupImportReport> {
 }
 
 function normalizeRelation(relation: KnowledgeRelation): KnowledgeRelation {
-  if (!SYMMETRIC_RELATION_TYPES.has(relation.relationType) || relation.fromEntityId.localeCompare(relation.toEntityId) <= 0) {
+  if (!isSymmetricRelationType(relation.relationType) || relation.fromEntityId.localeCompare(relation.toEntityId) <= 0) {
     return { ...relation }
   }
   return { ...relation, fromEntityId: relation.toEntityId, toEntityId: relation.fromEntityId }

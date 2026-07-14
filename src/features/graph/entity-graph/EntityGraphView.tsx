@@ -9,6 +9,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import type { KnowledgeEntityType, KnowledgeRelationType } from '../../../types'
+import { isDirectedRelationType } from '../../../utils/knowledgeRelationSemantics'
 import { buildEntityGraph } from './buildEntityGraph'
 import { entityGraphService } from './entityGraphService'
 import { forceLayoutAdapter } from './forceLayoutAdapter'
@@ -69,13 +70,6 @@ const entityTypeColors: Record<KnowledgeEntityType, string> = {
   person: '#d34f7b',
   term: '#64748b',
 }
-
-const directedRelationTypes = new Set<KnowledgeRelationType>([
-  'depends_on',
-  'contains',
-  'explains',
-  'prerequisite',
-])
 
 
 export default function EntityGraphView(
@@ -173,7 +167,7 @@ export default function EntityGraphView(
       style: { stroke: 'var(--border)' },
     }
 
-    return directedRelationTypes.has(edge.relation.relationType)
+    return isDirectedRelationType(edge.relation.relationType)
       ? { ...base, markerEnd: { type: MarkerType.ArrowClosed } }
       : base
   }) ?? [], [graphData])

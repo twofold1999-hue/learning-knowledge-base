@@ -4,8 +4,7 @@ import { appendAuditLog } from './knowledgeAuditService'
 import { parseKnowledgeCandidatesPayload } from './ai/knowledge-candidates'
 import type { AIKnowledgeEntityCandidate, AIKnowledgeRelationCandidate } from './ai/types'
 import type { AIResult, KnowledgeEntity, KnowledgeRelation, NoteEntityLinkRole } from '../types'
-
-const SYMMETRIC_RELATION_TYPES = new Set<KnowledgeRelation['relationType']>(['related_to', 'contrasts_with'])
+import { isSymmetricRelationType } from '../utils/knowledgeRelationSemantics'
 
 export type KnowledgeCandidateApplicationErrorCode =
   | 'NOTE_NOT_FOUND'
@@ -56,7 +55,7 @@ function normalizeText(value: string): string {
 }
 
 function normalizeDirection(fromEntityId: string, toEntityId: string, relationType: KnowledgeRelation['relationType']): Pick<KnowledgeRelation, 'fromEntityId' | 'toEntityId'> {
-  if (SYMMETRIC_RELATION_TYPES.has(relationType) && fromEntityId.localeCompare(toEntityId) > 0) {
+  if (isSymmetricRelationType(relationType) && fromEntityId.localeCompare(toEntityId) > 0) {
     return { fromEntityId: toEntityId, toEntityId: fromEntityId }
   }
   return { fromEntityId, toEntityId }

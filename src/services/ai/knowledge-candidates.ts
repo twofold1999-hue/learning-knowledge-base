@@ -1,10 +1,10 @@
 import type { KnowledgeEntityType, KnowledgeRelationType, NoteEntityLinkRole } from '../../types'
+import { isSymmetricRelationType } from '../../utils/knowledgeRelationSemantics'
 import { AIError, type AIKnowledgeCandidates, type AIKnowledgeEntityCandidate, type AIKnowledgeRelationCandidate } from './types'
 
 const ENTITY_TYPES = new Set<KnowledgeEntityType>(['concept', 'topic', 'tool', 'method', 'person', 'term'])
 const NOTE_ROLES = new Set<NoteEntityLinkRole>(['defines', 'mentions', 'example', 'prerequisite'])
 const RELATION_TYPES = new Set<KnowledgeRelationType>(['related_to', 'depends_on', 'contains', 'explains', 'contrasts_with', 'prerequisite'])
-const SYMMETRIC_RELATION_TYPES = new Set<KnowledgeRelationType>(['related_to', 'contrasts_with'])
 
 type RecordValue = Record<string, unknown>
 
@@ -48,7 +48,7 @@ function normalizeText(value: string): string {
 }
 
 function normalizeDirection(fromEntityKey: string, toEntityKey: string, relationType: KnowledgeRelationType): Pick<AIKnowledgeRelationCandidate, 'fromEntityKey' | 'toEntityKey'> {
-  if (SYMMETRIC_RELATION_TYPES.has(relationType) && fromEntityKey.localeCompare(toEntityKey) > 0) {
+  if (isSymmetricRelationType(relationType) && fromEntityKey.localeCompare(toEntityKey) > 0) {
     return { fromEntityKey: toEntityKey, toEntityKey: fromEntityKey }
   }
   return { fromEntityKey, toEntityKey }

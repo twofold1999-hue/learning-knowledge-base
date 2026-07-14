@@ -1,8 +1,7 @@
 import { db, generateId } from './db'
 import { appendAuditLog } from './knowledgeAuditService'
 import type { KnowledgeRelation, KnowledgeRelationSource, KnowledgeRelationStatus, KnowledgeRelationType } from '../types'
-
-const SYMMETRIC_RELATION_TYPES = new Set<KnowledgeRelationType>(['related_to', 'contrasts_with'])
+import { isSymmetricRelationType } from '../utils/knowledgeRelationSemantics'
 
 export type KnowledgeRelationReferenceErrorCode = 'from_entity_missing' | 'to_entity_missing'
 
@@ -32,7 +31,7 @@ function validateConfidence(confidence: number): number {
 function normalizeRelationDirection(input: CreateKnowledgeRelationInput): Pick<KnowledgeRelation, 'fromEntityId' | 'toEntityId'> {
   if (!input.fromEntityId.trim() || !input.toEntityId.trim()) throw new Error('关系两端的知识实体不能为空。')
   if (input.fromEntityId === input.toEntityId) throw new Error('不允许创建实体自关联。')
-  if (SYMMETRIC_RELATION_TYPES.has(input.relationType) && input.fromEntityId.localeCompare(input.toEntityId) > 0) return { fromEntityId: input.toEntityId, toEntityId: input.fromEntityId }
+  if (isSymmetricRelationType(input.relationType) && input.fromEntityId.localeCompare(input.toEntityId) > 0) return { fromEntityId: input.toEntityId, toEntityId: input.fromEntityId }
   return { fromEntityId: input.fromEntityId, toEntityId: input.toEntityId }
 }
 
