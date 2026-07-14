@@ -13,6 +13,7 @@ interface AINoteOrganizerProps {
   content: string
   noteId?: string
   onApply: (appliedNote: Note) => void
+  onAIHistoryChanged?: () => void
   service?: NoteOrganizationService
   applicationService?: NoteResultApplicationService
 }
@@ -21,6 +22,7 @@ export default function AINoteOrganizer({
   content,
   noteId,
   onApply,
+  onAIHistoryChanged,
   service = aiService,
   applicationService = { applyAIResult, discardAIResult },
 }: AINoteOrganizerProps) {
@@ -49,6 +51,7 @@ export default function AINoteOrganizer({
       if (nextRequestId !== requestId.current) return
       setPreview(result)
       setStatus('success')
+      onAIHistoryChanged?.()
     } catch (reason) {
       if (nextRequestId !== requestId.current) return
       setStatus('error')
@@ -67,6 +70,7 @@ export default function AINoteOrganizer({
     if (!preview?.aiResultId) return
     try {
       await applicationService.discardAIResult(preview.aiResultId)
+      onAIHistoryChanged?.()
       resetPreview()
     } catch (reason) {
       setStatus('error')
@@ -84,6 +88,7 @@ export default function AINoteOrganizer({
         return
       }
       onApply(applied.note)
+      onAIHistoryChanged?.()
       resetPreview()
     } catch (reason) {
       setStatus('error')

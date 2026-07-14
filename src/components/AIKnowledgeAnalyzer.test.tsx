@@ -78,3 +78,50 @@ describe('AIKnowledgeAnalyzer', () => {
     expect(applicationService.discardKnowledgeCandidates).toHaveBeenCalledWith({ noteId: 'note_1', aiResultId: 'ai_candidates' })
   })
 })
+
+describe('AIHistory refresh notifications', () => {
+  it('在生成并应用知识候选后通知历史刷新', async () => {
+    const onAIHistoryChanged = vi.fn()
+    const service = { extractKnowledgeCandidates: vi.fn().mockResolvedValue({ candidates, generatedAt: new Date(), aiResultId: 'ai_candidates' }) }
+    const applicationService = { applyKnowledgeCandidates: vi.fn().mockResolvedValue({ applied: true, createdEntities: 2, reusedEntities: 0, createdNoteEntityLinks: 2, skippedExistingNoteEntityLinks: 0, createdRelations: 1, skippedExistingRelations: 0, aiResultId: 'ai_candidates' }), discardKnowledgeCandidates: vi.fn().mockResolvedValue({ status: 'discarded' }) }
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async () => { root?.render(<AIKnowledgeAnalyzer content="# CPU" noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+
+    await act(async () => { click('分析当前笔记'); await Promise.resolve() })
+    await act(async () => { click('应用所选候选'); await Promise.resolve() })
+
+    expect(onAIHistoryChanged).toHaveBeenCalledTimes(2)
+  })
+
+  it('过期应用不额外通知历史刷新', async () => {
+    const onAIHistoryChanged = vi.fn()
+    const service = { extractKnowledgeCandidates: vi.fn().mockResolvedValue({ candidates, generatedAt: new Date(), aiResultId: 'ai_candidates' }) }
+    const applicationService = { applyKnowledgeCandidates: vi.fn().mockResolvedValue({ applied: false, reason: 'stale', aiResultId: 'ai_candidates' }), discardKnowledgeCandidates: vi.fn().mockResolvedValue({ status: 'discarded' }) }
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async () => { root?.render(<AIKnowledgeAnalyzer content="# CPU" noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+
+    await act(async () => { click('分析当前笔记'); await Promise.resolve() })
+    await act(async () => { click('应用所选候选'); await Promise.resolve() })
+
+    expect(onAIHistoryChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('成功放弃知识候选后通知历史刷新', async () => {
+    const onAIHistoryChanged = vi.fn()
+    const service = { extractKnowledgeCandidates: vi.fn().mockResolvedValue({ candidates, generatedAt: new Date(), aiResultId: 'ai_candidates' }) }
+    const applicationService = { applyKnowledgeCandidates: vi.fn(), discardKnowledgeCandidates: vi.fn().mockResolvedValue({ status: 'discarded' }) }
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async () => { root?.render(<AIKnowledgeAnalyzer content="# CPU" noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+
+    await act(async () => { click('分析当前笔记'); await Promise.resolve() })
+    await act(async () => { click('放弃本次结果'); await Promise.resolve() })
+
+    expect(onAIHistoryChanged).toHaveBeenCalledTimes(2)
+  })
+})

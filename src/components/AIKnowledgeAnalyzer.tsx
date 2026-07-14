@@ -8,6 +8,7 @@ interface AIKnowledgeAnalyzerProps {
   service?: Pick<typeof aiService, 'extractKnowledgeCandidates'>
   applicationService?: Pick<typeof import('../services/knowledgeCandidateApplicationService'), 'applyKnowledgeCandidates' | 'discardKnowledgeCandidates'>
   onApplied?: () => void
+  onAIHistoryChanged?: () => void
 }
 
 const entityTypeLabels: Record<AIKnowledgeCandidates['entities'][number]['type'], string> = {
@@ -20,7 +21,7 @@ const relationLabels: Record<AIKnowledgeCandidates['relations'][number]['relatio
   related_to: '相关', depends_on: '依赖', contains: '包含', explains: '解释', contrasts_with: '对比', prerequisite: '前置',
 }
 
-export default function AIKnowledgeAnalyzer({ content, noteId, service = aiService, applicationService = { applyKnowledgeCandidates, discardKnowledgeCandidates }, onApplied }: AIKnowledgeAnalyzerProps) {
+export default function AIKnowledgeAnalyzer({ content, noteId, service = aiService, applicationService = { applyKnowledgeCandidates, discardKnowledgeCandidates }, onApplied, onAIHistoryChanged }: AIKnowledgeAnalyzerProps) {
   const [status, setStatus] = useState<'idle' | 'generating' | 'success' | 'error'>('idle')
   const [preview, setPreview] = useState<AIKnowledgeCandidatesResult | null>(null)
   const [selectedEntityKeys, setSelectedEntityKeys] = useState<Set<string>>(new Set())
@@ -43,6 +44,7 @@ export default function AIKnowledgeAnalyzer({ content, noteId, service = aiServi
       setSelectedEntityKeys(new Set(result.candidates.entities.map((entity) => entity.key)))
       setSelectedRelationKeys(new Set(result.candidates.relations.map((relation) => relation.key)))
       setStatus('success')
+      onAIHistoryChanged?.()
     } catch (reason) {
       setStatus('error')
       setMessage(reason instanceof Error ? reason.message : 'AI 分析失败，请稍后重试。')
@@ -96,6 +98,7 @@ export default function AIKnowledgeAnalyzer({ content, noteId, service = aiServi
       }
       setMessage(`已应用 ${report.createdEntities + report.reusedEntities} 个实体，新增 ${report.createdRelations} 条关系。`)
       onApplied?.()
+      onAIHistoryChanged?.()
       reset()
     } catch (reason) {
       setStatus('error')
@@ -107,6 +110,7 @@ export default function AIKnowledgeAnalyzer({ content, noteId, service = aiServi
     if (!preview?.aiResultId) return
     try {
       await applicationService.discardKnowledgeCandidates({ noteId, aiResultId: preview.aiResultId })
+      onAIHistoryChanged?.()
       setMessage('已放弃本次知识候选，历史记录仍被保留。')
       reset()
     } catch (reason) {

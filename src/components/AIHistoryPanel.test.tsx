@@ -132,3 +132,20 @@ describe('AIHistoryPanel', () => {
     expect(container?.querySelector('[role="alert"]')?.textContent).toContain('读取失败')
   })
 })
+
+describe('AIHistoryPanel refresh lifecycle', () => {
+  it('refreshKey 或 noteId 变化时重新读取对应历史', async () => {
+    const service = createService([])
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+
+    await act(async () => { root?.render(<AIHistoryPanel noteId="note_1" refreshKey={0} service={service} />); await Promise.resolve() })
+    await act(async () => { root?.render(<AIHistoryPanel noteId="note_1" refreshKey={1} service={service} />); await Promise.resolve() })
+    await act(async () => { root?.render(<AIHistoryPanel noteId="note_2" refreshKey={1} service={service} />); await Promise.resolve() })
+
+    expect(service.getAIResultHistoryByNoteId).toHaveBeenNthCalledWith(1, 'note_1')
+    expect(service.getAIResultHistoryByNoteId).toHaveBeenNthCalledWith(2, 'note_1')
+    expect(service.getAIResultHistoryByNoteId).toHaveBeenNthCalledWith(3, 'note_2')
+  })
+})

@@ -49,6 +49,7 @@ export default function EditorPage() {
   const courses = useProjectStore((s) => s.courses)
 
   const [knowledgeOverviewVersion, setKnowledgeOverviewVersion] = useState(0)
+  const [aiHistoryVersion, setAIHistoryVersion] = useState(0)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -559,13 +560,13 @@ export default function EditorPage() {
 
       {isEditMode ? (
         <>
-          {currentNote && <AIKnowledgeAnalyzer content={content} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} />}
+          {currentNote && <AIKnowledgeAnalyzer content={content} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
           {currentNote && <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />}
           {currentNote && <AINoteOrganizer content={content} noteId={currentNote.id} onApply={(appliedNote) => {
             setContent(appliedNote.content)
             synchronizePersistedNote(appliedNote)
-          }} />}
-          {currentNote && <AIHistoryPanel noteId={currentNote.id} />}
+          }} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
+          {currentNote && <AIHistoryPanel noteId={currentNote.id} refreshKey={aiHistoryVersion} />}
           <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
           <CodeMirrorEditor
             value={content}

@@ -15,6 +15,7 @@ type AIHistoryService = {
 
 export interface AIHistoryPanelProps {
   noteId: string
+  refreshKey?: number
   service?: AIHistoryService
 }
 
@@ -79,7 +80,7 @@ function KnowledgeImpact({ impact }: { impact: AIResultKnowledgeImpact | null | 
   </div>
 }
 
-export default function AIHistoryPanel({ noteId, service = defaultAIHistoryService }: AIHistoryPanelProps) {
+export default function AIHistoryPanel({ noteId, refreshKey = 0, service = defaultAIHistoryService }: AIHistoryPanelProps) {
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
   const [history, setHistory] = useState<AIResultHistoryItem[]>([])
   const [impacts, setImpacts] = useState<Record<string, AIResultKnowledgeImpact | null>>({})
@@ -109,7 +110,7 @@ export default function AIHistoryPanel({ noteId, service = defaultAIHistoryServi
         setError(reason instanceof Error ? reason.message : '读取 AI 历史失败。')
       }
     })()
-  }, [noteId, reloadToken, service])
+  }, [noteId, refreshKey, reloadToken, service])
 
   return <section aria-label="AI 历史" style={{ margin: '0 0 16px', padding: '12px', border: '1px solid rgba(91,180,255,.22)', borderRadius: '10px', background: 'linear-gradient(135deg, rgba(91,180,255,.07), rgba(187,154,247,.055))' }}>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>

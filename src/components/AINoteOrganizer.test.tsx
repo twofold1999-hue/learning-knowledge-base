@@ -138,3 +138,47 @@ describe('AINoteOrganizer', () => {
     expect(container?.querySelector('[role="alert"]')?.textContent).toContain('请先保存笔记')
   })
 })
+
+describe('AIHistory refresh notifications', () => {
+  it('在生成并应用整理结果后通知历史刷新', async () => {
+    const service: MockService = { summarizeNote: vi.fn().mockResolvedValue({ originalContent: '# 原始笔记', result: '## 整理结果', generatedAt: new Date(), aiResultId: 'summary_1' }) }
+    const applicationService = createApplicationService()
+    const onAIHistoryChanged = vi.fn()
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async () => { root?.render(<AINoteOrganizer content="# 原始笔记" noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+
+    await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
+    await act(async () => { clickButton('应用整理结果'); await Promise.resolve() })
+
+    expect(onAIHistoryChanged).toHaveBeenCalledTimes(2)
+  })
+
+  it('在放弃成功后通知历史刷新', async () => {
+    const service: MockService = { summarizeNote: vi.fn().mockResolvedValue({ originalContent: '# 原始笔记', result: '## 整理结果', generatedAt: new Date(), aiResultId: 'summary_1' }) }
+    const onAIHistoryChanged = vi.fn()
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async () => { root?.render(<AINoteOrganizer content="# 原始笔记" noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={createApplicationService()} onAIHistoryChanged={onAIHistoryChanged} />) })
+
+    await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
+    await act(async () => { clickButton('放弃结果'); await Promise.resolve() })
+
+    expect(onAIHistoryChanged).toHaveBeenCalledTimes(2)
+  })
+
+  it('整理失败时不通知历史刷新', async () => {
+    const onAIHistoryChanged = vi.fn()
+    const service: MockService = { summarizeNote: vi.fn().mockRejectedValue(new Error('服务不可用')) }
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async () => { root?.render(<AINoteOrganizer content="# 原始笔记" noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={createApplicationService()} onAIHistoryChanged={onAIHistoryChanged} />) })
+
+    await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
+
+    expect(onAIHistoryChanged).not.toHaveBeenCalled()
+  })
+})
