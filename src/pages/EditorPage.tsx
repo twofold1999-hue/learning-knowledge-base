@@ -14,6 +14,7 @@ import Outline from '../components/Outline'
 import VideoPanel from '../components/VideoPanel'
 import AINoteOrganizer from '../components/AINoteOrganizer'
 import AIKnowledgeAnalyzer from '../components/AIKnowledgeAnalyzer'
+import AIHistoryPanel from '../components/AIHistoryPanel'
 import KnowledgeOverviewPanel from '../components/KnowledgeOverviewPanel'
 import { formatVideoTimestamp, isBilibiliVideoUrl, openBilibiliStudy } from '../services/biliStudyBridge'
 import { getTagColor } from '../utils/tagColors'
@@ -564,6 +565,7 @@ export default function EditorPage() {
             setContent(appliedNote.content)
             synchronizePersistedNote(appliedNote)
           }} />}
+          {currentNote && <AIHistoryPanel noteId={currentNote.id} />}
           <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
           <CodeMirrorEditor
             value={content}
