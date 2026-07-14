@@ -21,6 +21,7 @@ interface NoteState {
   fetchNote: (noteId: string) => Promise<void>
   createNote: (data: CreateNoteInput) => Promise<string>
   updateNote: (noteId: string, data: NoteUpdate) => Promise<void>
+  synchronizePersistedNote: (note: Note) => void
   deleteNote: (noteId: string) => Promise<void>
   restoreDeletedNote: (noteId: string) => Promise<void>
   permanentlyDeleteNote: (noteId: string) => Promise<void>
@@ -101,6 +102,14 @@ export const useNoteStore = create<NoteState>((set) => ({
       set({ isSaving: activeSaves > 0, saveError: '保存失败，请重试' })
       throw e
     }
+  },
+  synchronizePersistedNote: (updatedNote) => {
+    set((state) => ({
+      currentNote: state.currentNote?.id === updatedNote.id ? updatedNote : state.currentNote,
+      notes: state.notes.map((note) => note.id === updatedNote.id ? updatedNote : note),
+      allNotes: state.allNotes.map((note) => note.id === updatedNote.id ? updatedNote : note),
+    }))
+    scheduleLocalBackup()
   },
   deleteNote: async (noteId) => {
     const deletedNote = await noteService.deleteNote(noteId)

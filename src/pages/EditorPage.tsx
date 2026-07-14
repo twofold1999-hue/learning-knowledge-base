@@ -40,6 +40,7 @@ export default function EditorPage() {
   const fetchNote = useNoteStore((s) => s.fetchNote)
   const createNote = useNoteStore((s) => s.createNote)
   const updateNote = useNoteStore((s) => s.updateNote)
+  const synchronizePersistedNote = useNoteStore((s) => s.synchronizePersistedNote)
   const deleteNote = useNoteStore((s) => s.deleteNote)
   const allNotes = useNoteStore((s) => s.allNotes)
   const directories = useDirectoryStore((s) => s.directories)
@@ -559,7 +560,10 @@ export default function EditorPage() {
         <>
           {currentNote && <AIKnowledgeAnalyzer content={content} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} />}
           {currentNote && <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />}
-          <AINoteOrganizer content={content} noteId={currentNote?.id} onApply={(nextContent) => { setContent(nextContent); triggerSave({ content: nextContent }) }} />
+          {currentNote && <AINoteOrganizer content={content} noteId={currentNote.id} onApply={(appliedNote) => {
+            setContent(appliedNote.content)
+            synchronizePersistedNote(appliedNote)
+          }} />}
           <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
           <CodeMirrorEditor
             value={content}

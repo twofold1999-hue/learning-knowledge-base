@@ -1,18 +1,29 @@
 import { useRef, useState } from 'react'
 import { aiService, type AINoteOrganizationStatus, type AISummarizeResult } from '../services/ai'
-import { getLatestAIResult, isAIResultStale, markApplied, markDiscarded, markStale } from '../services/aiResultService'
-
+import { applyAIResult, discardAIResult, type ApplyAIResultReport } from '../services/aiResultApplicationService'
+import type { Note } from '../types'
 
 type NoteOrganizationService = Pick<typeof aiService, 'summarizeNote'>
+type NoteResultApplicationService = {
+  applyAIResult: (aiResultId: string, currentContent?: string) => Promise<ApplyAIResultReport>
+  discardAIResult: (aiResultId: string) => Promise<unknown>
+}
 
 interface AINoteOrganizerProps {
   content: string
   noteId?: string
-  onApply: (organizedContent: string) => void
+  onApply: (appliedNote: Note) => void
   service?: NoteOrganizationService
+  applicationService?: NoteResultApplicationService
 }
 
-export default function AINoteOrganizer({ content, noteId, onApply, service = aiService }: AINoteOrganizerProps) {
+export default function AINoteOrganizer({
+  content,
+  noteId,
+  onApply,
+  service = aiService,
+  applicationService = { applyAIResult, discardAIResult },
+}: AINoteOrganizerProps) {
   const [status, setStatus] = useState<AINoteOrganizationStatus>('idle')
   const [preview, setPreview] = useState<AISummarizeResult | null>(null)
   const [error, setError] = useState('')
@@ -22,6 +33,11 @@ export default function AINoteOrganizer({ content, noteId, onApply, service = ai
     if (!content.trim()) {
       setStatus('error')
       setError('当前笔记为空，无法进行整理。')
+      return
+    }
+    if (!noteId?.trim()) {
+      setStatus('error')
+      setError('请先保存笔记，再使用 AI 整理。')
       return
     }
     const nextRequestId = ++requestId.current
@@ -48,36 +64,30 @@ export default function AINoteOrganizer({ content, noteId, onApply, service = ai
   }
 
   const discard = async () => {
-    if (preview?.aiResultId) await markDiscarded(preview.aiResultId)
-    resetPreview()
-  }
-
-  const apply = async () => {
-    if (!preview) return
+    if (!preview?.aiResultId) return
     try {
-      if (noteId && preview.aiResultId) {
-        const latest = await getLatestAIResult(noteId, 'summary')
-        if (!latest || latest.id !== preview.aiResultId) {
-          setStatus('error')
-          setError('整理结果已失效，请重新生成。')
-          return
-        }
-        if (isAIResultStale(latest, content)) {
-          setStatus('error')
-          setError('整理结果已过期，请重新生成。')
-          await markStale(latest.id)
-          return
-        }
-        onApply(preview.result)
-        await markApplied(latest.id)
-        resetPreview()
-        return
-      }
-      onApply(preview.result)
+      await applicationService.discardAIResult(preview.aiResultId)
       resetPreview()
     } catch (reason) {
       setStatus('error')
-      setError(reason instanceof Error ? reason.message : '更新 AI 结果状态失败，请稍后重试。')
+      setError(reason instanceof Error ? reason.message : '放弃 AI 整理结果失败，请稍后重试。')
+    }
+  }
+
+  const apply = async () => {
+    if (!preview?.aiResultId) return
+    try {
+      const applied = await applicationService.applyAIResult(preview.aiResultId, content)
+      if (!applied.applied) {
+        setStatus('error')
+        setError('整理结果已过期，请重新生成。')
+        return
+      }
+      onApply(applied.note)
+      resetPreview()
+    } catch (reason) {
+      setStatus('error')
+      setError(reason instanceof Error ? reason.message : '应用 AI 整理结果失败，请稍后重试。')
     }
   }
 
