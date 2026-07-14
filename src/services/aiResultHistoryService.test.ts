@@ -3,6 +3,7 @@ import { db } from './db'
 import {
   getAIResultHistoryByNoteId,
   getAIResultImpact,
+  getAIResultImpactStates,
 } from './aiResultHistoryService'
 import type { AIResult, KnowledgeAuditLog, KnowledgeRelation } from '../types'
 
@@ -141,6 +142,32 @@ describe('AIResult 历史只读查询', () => {
     await expect(getAIResultImpact('missing')).resolves.toBeNull()
   })
 
+  it('单个知识影响读取失败时安全返回部分结果', async () => {
+    await db.aiResults.bulkAdd([
+      result({ id: 'broken-candidates', type: 'knowledge_candidates' }),
+      result({ id: 'healthy-candidates', type: 'knowledge_candidates' }),
+    ])
+    const aiResults = db.aiResults as unknown as {
+      get: (id: string) => Promise<AIResult | undefined>
+    }
+    const originalGet = aiResults.get.bind(aiResults)
+    const getSpy = vi.spyOn(aiResults, 'get').mockImplementation(async (id) => {
+      if (id === 'broken-candidates') throw new Error('影响读取失败')
+      return originalGet(id)
+    })
+
+    try {
+      const states = await getAIResultImpactStates(['broken-candidates', 'healthy-candidates'])
+
+      expect(states['broken-candidates']).toEqual({ impact: null, impactError: true })
+      expect(states['healthy-candidates']).toMatchObject({
+        impact: { aiResultId: 'healthy-candidates' },
+        impactError: false,
+      })
+    } finally {
+      getSpy.mockRestore()
+    }
+  })
   it('不修改调用输入或任何数据库记录', async () => {
     const payload = { markdown: '冻结结果' }
     const stored = result({ id: 'immutable', payload })

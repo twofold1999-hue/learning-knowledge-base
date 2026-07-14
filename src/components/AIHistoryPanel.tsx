@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   getAIResultHistoryByNoteId,
-  getAIResultImpact,
+  getAIResultImpactStates,
   type AIResultHistoryItem,
-  type AIResultKnowledgeImpact,
+  type AIResultImpactState,
   type AIResultPayloadSummary,
 } from '../services/aiResultHistoryService'
 import type { AIResult } from '../types'
 
 type AIHistoryService = {
   getAIResultHistoryByNoteId: (noteId: string) => Promise<AIResultHistoryItem[]>
-  getAIResultImpact: (aiResultId: string) => Promise<AIResultKnowledgeImpact | null>
+  getAIResultImpactStates: (aiResultIds: string[]) => Promise<Record<string, AIResultImpactState>>
 }
 
 export interface AIHistoryPanelProps {
@@ -19,7 +19,7 @@ export interface AIHistoryPanelProps {
   service?: AIHistoryService
 }
 
-const defaultAIHistoryService: AIHistoryService = { getAIResultHistoryByNoteId, getAIResultImpact }
+const defaultAIHistoryService: AIHistoryService = { getAIResultHistoryByNoteId, getAIResultImpactStates }
 
 const typeLabels: Record<AIResult['type'], string> = {
   summary: '笔记整理',
@@ -72,7 +72,10 @@ function PayloadSummary({ summary }: { summary: AIResultPayloadSummary }) {
   return <div style={{ marginTop: '7px', color: 'var(--muted)', fontSize: '12px' }}>候选实体 {summary.entityCount} · 候选关系 {summary.relationCount}</div>
 }
 
-function KnowledgeImpact({ impact }: { impact: AIResultKnowledgeImpact | null | undefined }) {
+function KnowledgeImpact({ state }: { state: AIResultImpactState | undefined }) {
+  if (state?.impactError) return <div style={{ marginTop: '7px', color: 'var(--muted)', fontSize: '12px' }}>知识影响暂不可用</div>
+
+  const impact = state?.impact
   if (!impact || (impact.entityChangeCount === 0 && impact.noteEntityLinkChangeCount === 0 && impact.relationChangeCount === 0)) return null
 
   return <div style={{ marginTop: '7px', color: 'var(--green)', fontSize: '12px' }}>
@@ -83,7 +86,7 @@ function KnowledgeImpact({ impact }: { impact: AIResultKnowledgeImpact | null | 
 export default function AIHistoryPanel({ noteId, refreshKey = 0, service = defaultAIHistoryService }: AIHistoryPanelProps) {
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading')
   const [history, setHistory] = useState<AIResultHistoryItem[]>([])
-  const [impacts, setImpacts] = useState<Record<string, AIResultKnowledgeImpact | null>>({})
+  const [impactStates, setImpactStates] = useState<Record<string, AIResultImpactState>>({})
   const [error, setError] = useState('')
   const [reloadToken, setReloadToken] = useState(0)
   const requestId = useRef(0)
@@ -92,17 +95,17 @@ export default function AIHistoryPanel({ noteId, refreshKey = 0, service = defau
     const currentRequestId = ++requestId.current
     setState('loading')
     setHistory([])
-    setImpacts({})
+    setImpactStates({})
     setError('')
 
     void (async () => {
       try {
         const nextHistory = await service.getAIResultHistoryByNoteId(noteId)
         const knowledgeResults = nextHistory.filter((item) => item.type === 'knowledge_candidates')
-        const entries = await Promise.all(knowledgeResults.map(async (item) => [item.id, await service.getAIResultImpact(item.id)] as const))
+        const nextImpactStates = await service.getAIResultImpactStates(knowledgeResults.map((item) => item.id))
         if (currentRequestId !== requestId.current) return
         setHistory(nextHistory)
-        setImpacts(Object.fromEntries(entries))
+        setImpactStates(nextImpactStates)
         setState('success')
       } catch (reason) {
         if (currentRequestId !== requestId.current) return
@@ -132,7 +135,7 @@ export default function AIHistoryPanel({ noteId, refreshKey = 0, service = defau
         {item.parseError || !item.payloadSummary
           ? <div style={{ marginTop: '7px', color: 'var(--red)', fontSize: '12px' }}>结果内容无法安全解析，原始历史记录仍已保留。</div>
           : <PayloadSummary summary={item.payloadSummary} />}
-        <KnowledgeImpact impact={impacts[item.id]} />
+        <KnowledgeImpact state={impactStates[item.id]} />
       </article>)}
     </div>}
   </section>

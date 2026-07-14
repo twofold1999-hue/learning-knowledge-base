@@ -2,7 +2,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AIHistoryPanel from './AIHistoryPanel'
-import type { AIResultHistoryItem, AIResultKnowledgeImpact } from '../services/aiResultHistoryService'
+import type { AIResultHistoryItem, AIResultImpactState, AIResultKnowledgeImpact } from '../services/aiResultHistoryService'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -45,13 +45,16 @@ const impact: AIResultKnowledgeImpact = {
 
 type HistoryService = {
   getAIResultHistoryByNoteId: (noteId: string) => Promise<AIResultHistoryItem[]>
-  getAIResultImpact: (aiResultId: string) => Promise<AIResultKnowledgeImpact | null>
+  getAIResultImpactStates: (aiResultIds: string[]) => Promise<Record<string, AIResultImpactState>>
 }
 
 function createService(history: AIResultHistoryItem[] = [knowledgeItem, summaryItem]): HistoryService {
   return {
     getAIResultHistoryByNoteId: vi.fn().mockResolvedValue(history),
-    getAIResultImpact: vi.fn().mockImplementation(async (id: string) => id === knowledgeItem.id ? impact : { aiResultId: id, auditLogCount: 0, entityChangeCount: 0, noteEntityLinkChangeCount: 0, relationChangeCount: 0, currentRelationCount: 0 }),
+    getAIResultImpactStates: vi.fn().mockImplementation(async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, {
+      impact: id === knowledgeItem.id ? impact : { aiResultId: id, auditLogCount: 0, entityChangeCount: 0, noteEntityLinkChangeCount: 0, relationChangeCount: 0, currentRelationCount: 0 },
+      impactError: false,
+    }]))),
   }
 }
 
@@ -77,13 +80,13 @@ describe('AIHistoryPanel', () => {
     let resolveHistory: ((history: AIResultHistoryItem[]) => void) | undefined
     const service: HistoryService = {
       getAIResultHistoryByNoteId: vi.fn(() => new Promise<AIResultHistoryItem[]>((resolve) => { resolveHistory = resolve })),
-      getAIResultImpact: vi.fn(),
+      getAIResultImpactStates: vi.fn(),
     }
     await render(service)
 
     expect(container?.querySelector('[role="status"]')?.textContent).toContain('正在加载 AI 历史')
     expect(service.getAIResultHistoryByNoteId).toHaveBeenCalledWith('note_1')
-    expect(service.getAIResultImpact).not.toHaveBeenCalled()
+    expect(service.getAIResultImpactStates).not.toHaveBeenCalled()
 
     await act(async () => { resolveHistory?.([]); await Promise.resolve() })
   })
@@ -107,8 +110,8 @@ describe('AIHistoryPanel', () => {
     expect(container?.textContent).toContain('实体 1')
     expect(container?.textContent).toContain('笔记关联 1')
     expect(container?.textContent).toContain('关系 1')
-    expect(service.getAIResultImpact).toHaveBeenCalledTimes(1)
-    expect(service.getAIResultImpact).toHaveBeenCalledWith('knowledge_1')
+    expect(service.getAIResultImpactStates).toHaveBeenCalledTimes(1)
+    expect(service.getAIResultImpactStates).toHaveBeenCalledWith(['knowledge_1'])
   })
 
   it('长整理内容通过 details 折叠，并对异常 payload 显示安全降级提示', async () => {
@@ -122,10 +125,32 @@ describe('AIHistoryPanel', () => {
     expect(container?.textContent).toContain('结果内容无法安全解析')
   })
 
+  it('单个知识影响失败时保留所有历史并显示局部降级状态', async () => {
+    const secondKnowledgeItem: AIResultHistoryItem = {
+      ...knowledgeItem,
+      id: 'knowledge_2',
+      createdAt: '2026-07-14T03:03:04.000Z',
+      payloadSummary: { kind: 'knowledge_candidates', entityCount: 3, relationCount: 2 },
+    }
+    const healthyImpact: AIResultKnowledgeImpact = { ...impact, aiResultId: 'knowledge_2' }
+    const service = createService([knowledgeItem, secondKnowledgeItem, summaryItem])
+    service.getAIResultImpactStates = vi.fn().mockResolvedValue({
+      knowledge_1: { impact: null, impactError: true },
+      knowledge_2: { impact: healthyImpact, impactError: false },
+    })
+
+    await render(service)
+
+    expect(container?.querySelector('[role="alert"]')).toBeNull()
+    expect(container?.textContent).toContain('候选实体 2')
+    expect(container?.textContent).toContain('候选实体 3')
+    expect(container?.textContent).toContain('知识影响暂不可用')
+    expect(container?.textContent).toContain('已影响知识库：实体 1')
+  })
   it('查询服务失败时显示错误状态', async () => {
     const service: HistoryService = {
       getAIResultHistoryByNoteId: vi.fn().mockRejectedValue(new Error('读取失败')),
-      getAIResultImpact: vi.fn(),
+      getAIResultImpactStates: vi.fn(),
     }
     await render(service)
 

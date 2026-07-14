@@ -36,6 +36,11 @@ export interface AIResultKnowledgeImpact {
   currentRelationCount: number
 }
 
+export interface AIResultImpactState {
+  impact: AIResultKnowledgeImpact | null
+  impactError: boolean
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -153,4 +158,21 @@ export async function getAIResultImpact(aiResultId: string): Promise<AIResultKno
       currentRelationCount: countCurrentRelations(relations, aiResultId),
     }
   })
+}
+
+/**
+ * Reads impact summaries independently so one failed impact query cannot hide
+ * the rest of a note's persisted AI history.
+ */
+export async function getAIResultImpactStates(aiResultIds: string[]): Promise<Record<string, AIResultImpactState>> {
+  const ids = [...new Set(aiResultIds.filter((id) => id.trim().length > 0))]
+  const entries = await Promise.all(ids.map(async (aiResultId) => {
+    try {
+      return [aiResultId, { impact: await getAIResultImpact(aiResultId), impactError: false }] as const
+    } catch {
+      return [aiResultId, { impact: null, impactError: true }] as const
+    }
+  }))
+
+  return Object.fromEntries(entries)
 }
