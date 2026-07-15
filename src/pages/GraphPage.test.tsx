@@ -1,6 +1,6 @@
 import { act, lazy, Suspense } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import GraphPage from './GraphPage'
 import { EntityGraphErrorBoundary } from '../components/EntityGraphErrorBoundary'
@@ -18,10 +18,19 @@ vi.mock('../features/graph/note-graph/NoteGraphView', async () => {
 vi.mock('../features/graph/entity-graph/EntityGraphView', async () => {
   const React = await import('react')
   return {
-    default: () => {
+    default: ({ onEntityOpen }: { onEntityOpen?: (entityId: string) => void }) => {
       featureState.entityRendered()
       if (featureState.entityThrows) throw new Error('entity view render failed')
-      return React.createElement('div', null, '实体图谱测试视图')
+      return React.createElement(
+        'div',
+        null,
+        '实体图谱测试视图',
+        React.createElement(
+          'button',
+          { onClick: () => onEntityOpen?.('entity_test') },
+          '打开实体测试节点',
+        ),
+      )
     },
   }
 })
@@ -29,6 +38,10 @@ vi.mock('../features/graph/entity-graph/EntityGraphView', async () => {
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-testid="location">{location.pathname}</output>
+}
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 async function renderPage(): Promise<HTMLDivElement> {
@@ -37,7 +50,7 @@ async function renderPage(): Promise<HTMLDivElement> {
   document.body.append(nextContainer)
   root = createRoot(nextContainer)
   await act(async () => {
-    root?.render(<MemoryRouter><GraphPage /></MemoryRouter>)
+    root?.render(<MemoryRouter initialEntries={['/graph']}><GraphPage /><LocationProbe /></MemoryRouter>)
     await Promise.resolve()
   })
 
@@ -93,6 +106,17 @@ describe('GraphPage', () => {
 
     await act(async () => { clickButton('笔记图谱') })
     expect(container?.textContent).toContain('笔记图谱测试视图')
+  })
+
+  it('navigates to entity details only when the entity view reports a stable ID', async () => {
+    await renderPage()
+    expect(container?.querySelector('[data-testid="location"]')?.textContent).toBe('/graph')
+
+    await act(async () => { clickButton('实体图谱') })
+    await flushLazy()
+    await act(async () => { clickButton('打开实体测试节点') })
+
+    expect(container?.querySelector('[data-testid="location"]')?.textContent).toBe('/knowledge/entities/entity_test')
   })
 
   it('resets to note mode when the page remounts', async () => {

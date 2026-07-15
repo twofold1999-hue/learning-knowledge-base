@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { EntityGraphErrorBoundary } from '../components/EntityGraphErrorBoundary'
 import NoteGraphView from '../features/graph/note-graph/NoteGraphView'
 
@@ -10,6 +11,11 @@ type GraphMode = 'note' | 'entity'
 
 export default function GraphPage() {
   const [mode, setMode] = useState<GraphMode>('note')
+  const navigate = useNavigate()
+
+  const handleEntityOpen = (entityId: string) => {
+    navigate(`/knowledge/entities/${encodeURIComponent(entityId)}`)
+  }
 
   return (
     <section style={{ position: 'relative', minHeight: 'calc(100vh - 66px)' }}>
@@ -64,7 +70,7 @@ export default function GraphPage() {
       {mode === 'note' ? <NoteGraphView /> : (
         <EntityGraphErrorBoundary>
           <Suspense fallback={<p style={{ padding: 40, textAlign: 'center', color: 'var(--faint)' }}>加载实体图谱...</p>}>
-            <EntityGraphView />
+            <EntityGraphView onEntityOpen={handleEntityOpen} />
           </Suspense>
         </EntityGraphErrorBoundary>
       )}

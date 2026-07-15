@@ -6,6 +6,7 @@ import ReactFlow, {
   MiniMap,
   type Edge,
   type Node,
+  type NodeMouseHandler,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import type { KnowledgeEntityType, KnowledgeRelationType } from '../../../types'
@@ -26,6 +27,7 @@ export interface EntityGraphViewProps {
   service?: EntityGraphService
   builder?: typeof buildEntityGraph
   layoutAdapter?: EntityGraphLayoutAdapter
+  onEntityOpen?: (entityId: string) => void
 }
 
 type GraphData = {
@@ -157,6 +159,10 @@ export default function EntityGraphView(
     },
   })) ?? [], [graphData])
 
+  const handleNodeClick: NodeMouseHandler = (_event, node) => {
+    props.onEntityOpen?.(node.id)
+  }
+
   const flowEdges = useMemo<Edge[]>(() => graphData?.layout.edges.map((edge) => {
     const base: Edge = {
       id: edge.id,
@@ -214,6 +220,7 @@ export default function EntityGraphView(
             minZoom={0.1}
             maxZoom={3}
             proOptions={{ hideAttribution: true }}
+            onNodeClick={handleNodeClick}
           >
             <Background color="var(--border)" gap={20} size={1} />
             <Controls showInteractive={false} />

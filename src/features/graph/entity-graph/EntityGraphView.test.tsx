@@ -21,7 +21,7 @@ vi.mock('reactflow', async () => {
   const Empty = () => null
 
   return {
-    default: (props: { nodes: unknown[]; edges: unknown[] }) => {
+    default: (props: { nodes: unknown[]; edges: unknown[]; onNodeClick?: (event: unknown, node: { id: string }) => void }) => {
       flowSpy.render(props)
       return React.createElement('div', { 'data-testid': 'react-flow' })
     },
@@ -145,9 +145,13 @@ async function renderView(props: Parameters<typeof EntityGraphView>[0]) {
   })
 }
 
-function lastFlowProps(): { nodes: Array<{ id: string; data: unknown }>; edges: Array<Record<string, unknown>> } {
+function lastFlowProps(): {
+  nodes: Array<{ id: string; data: unknown }>
+  edges: Array<Record<string, unknown>>
+  onNodeClick?: (event: unknown, node: { id: string }) => void
+} {
   const calls = flowSpy.render.mock.calls
-  return calls[calls.length - 1]?.[0] as { nodes: Array<{ id: string; data: unknown }>; edges: Array<Record<string, unknown>> }
+  return calls[calls.length - 1]?.[0] as ReturnType<typeof lastFlowProps>
 }
 
 function setNativeValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
@@ -232,6 +236,27 @@ describe('EntityGraphView', () => {
     expect(props.edges.find((edge) => edge.id === 'relation_symmetric')).not.toHaveProperty('markerStart')
   })
 
+  it('reports the stable entity ID when a React Flow node is clicked and remains safe without a callback', async () => {
+    const onEntityOpen = vi.fn()
+    const dependencies = createDependencies()
+    await renderView({ ...dependencies, onEntityOpen })
+
+    const props = lastFlowProps()
+    await act(async () => {
+      props.onNodeClick?.(new MouseEvent('click'), props.nodes[0])
+    })
+    expect(onEntityOpen).toHaveBeenCalledWith('entity_cpu')
+  })
+
+  it('keeps node clicks safe when no entity callback is supplied', async () => {
+    const dependencies = createDependencies()
+    await renderView(dependencies)
+
+    const props = lastFlowProps()
+    expect(() => {
+      props.onNodeClick?.(new MouseEvent('click'), props.nodes[0])
+    }).not.toThrow()
+  })
   it('shows a loading state while the snapshot request is pending', async () => {
     let resolveSnapshot: ((value: EntityGraphSnapshot) => void) | undefined
     const service = {

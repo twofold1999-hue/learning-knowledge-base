@@ -172,6 +172,20 @@ test('renders only approved knowledge entities and restores the note graph after
   await expect(entityGraph).toHaveCount(0)
 })
 
+test('opens the existing entity detail route when an entity graph node is clicked', async ({ page }) => {
+  await openGraph(page)
+  await seedKnowledgeGraph(page)
+  await page.getByRole('button', { name: '实体图谱', exact: true }).click()
+
+  const entityGraph = page.locator('section[aria-label="实体图谱"]')
+  const pythonNode = entityGraph.locator('.react-flow__node').filter({ hasText: 'Python' })
+  await expect(pythonNode).toBeVisible()
+  await pythonNode.click()
+
+  await expect(page).toHaveURL(/\/knowledge\/entities\/e2e-entity-python$/)
+  await expect(page.getByRole('heading', { name: 'Python' })).toBeVisible()
+})
+
 test('returns to the note graph after a browser refresh', async ({ page }) => {
   await openGraph(page)
   await seedKnowledgeGraph(page)
