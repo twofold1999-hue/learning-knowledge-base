@@ -30,6 +30,23 @@ describe('editorSaveCoordinator', () => {
     expect(save).toHaveBeenCalledWith('note_1', { content: '最新正文' })
   })
 
+  it('debounces rapid A/B/C draft patches into one latest content save', async () => {
+    vi.useFakeTimers()
+    const save = vi.fn().mockResolvedValue(undefined)
+    const coordinator = createEditorSaveCoordinator(save, 800)
+
+    coordinator.schedule('note_1', { content: 'A' })
+    await vi.advanceTimersByTimeAsync(300)
+    coordinator.schedule('note_1', { content: 'B' })
+    await vi.advanceTimersByTimeAsync(300)
+    coordinator.schedule('note_1', { content: 'C' })
+    await vi.advanceTimersByTimeAsync(799)
+    expect(save).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(save).toHaveBeenCalledWith('note_1', { content: 'C' })
+  })
   it('waits for an in-flight save before resolving an apply barrier', async () => {
     vi.useFakeTimers()
     const firstWrite = deferred<void>()

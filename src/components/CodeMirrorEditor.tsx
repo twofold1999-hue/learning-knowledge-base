@@ -27,6 +27,7 @@ export default function CodeMirrorEditor({ value, onChange, onSave }: Props) {
   const viewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
   const onSaveRef = useRef(onSave)
+  const isApplyingExternalContent = useRef(false)
   const [imageError, setImageError] = useState<string | null>(null)
 
   // 保持 ref 最新
@@ -61,7 +62,7 @@ export default function CodeMirrorEditor({ value, onChange, onSave }: Props) {
         saveKeymap,
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
+          if (update.docChanged && !isApplyingExternalContent.current) {
             onChangeRef.current(update.state.doc.toString())
           }
         }),
@@ -109,9 +110,14 @@ export default function CodeMirrorEditor({ value, onChange, onSave }: Props) {
     if (!view) return
     const currentDoc = view.state.doc.toString()
     if (currentDoc !== value) {
-      view.dispatch({
-        changes: { from: 0, to: currentDoc.length, insert: value },
-      })
+      isApplyingExternalContent.current = true
+      try {
+        view.dispatch({
+          changes: { from: 0, to: currentDoc.length, insert: value },
+        })
+      } finally {
+        isApplyingExternalContent.current = false
+      }
     }
   }, [value])
 

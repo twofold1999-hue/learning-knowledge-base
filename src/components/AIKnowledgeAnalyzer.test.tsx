@@ -28,7 +28,7 @@ function click(label: string) {
   button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 }
 
-async function render(onApplied = vi.fn()) {
+async function render(onApplied = vi.fn(), getCurrentContent: () => string = () => '# CPU') {
   const service = { extractKnowledgeCandidates: vi.fn().mockResolvedValue({ candidates, generatedAt: new Date('2026-07-12T00:00:00Z'), aiResultId: 'ai_candidates' }) }
   const applicationService = {
     applyKnowledgeCandidates: vi.fn().mockResolvedValue({ applied: true, createdEntities: 2, reusedEntities: 0, createdNoteEntityLinks: 2, skippedExistingNoteEntityLinks: 0, createdRelations: 1, skippedExistingRelations: 0, aiResultId: 'ai_candidates' }),
@@ -37,7 +37,7 @@ async function render(onApplied = vi.fn()) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => { root?.render(<AIKnowledgeAnalyzer content="# CPU" noteId="note_1" service={service} applicationService={applicationService} onApplied={onApplied} />) })
+  await act(async () => { root?.render(<AIKnowledgeAnalyzer getCurrentContent={getCurrentContent} noteId="note_1" service={service} applicationService={applicationService} onApplied={onApplied} />) })
   return { service, applicationService, onApplied }
 }
 
@@ -57,6 +57,16 @@ describe('AIKnowledgeAnalyzer', () => {
     expect(onApplied).toHaveBeenCalledTimes(1)
   })
 
+  it('在候选应用时读取最新草稿', async () => {
+    let currentContent = '# 草稿 A'
+    const { service, applicationService } = await render(vi.fn(), () => currentContent)
+    await act(async () => { click('分析当前笔记'); await Promise.resolve() })
+    currentContent = '# 草稿 B'
+    await act(async () => { click('应用所选候选'); await Promise.resolve() })
+
+    expect(service.extractKnowledgeCandidates).toHaveBeenCalledWith('# 草稿 A', { noteId: 'note_1' })
+    expect(applicationService.applyKnowledgeCandidates).toHaveBeenLastCalledWith(expect.any(Object), '# 草稿 B')
+  })
   it('只有成功应用时才触发知识结构刷新回调', async () => {
     const { applicationService, onApplied } = await render()
     applicationService.applyKnowledgeCandidates.mockResolvedValueOnce({ applied: false, reason: 'stale', aiResultId: 'ai_candidates' })
@@ -87,7 +97,7 @@ describe('AIHistory refresh notifications', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    await act(async () => { root?.render(<AIKnowledgeAnalyzer content="# CPU" noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+    await act(async () => { root?.render(<AIKnowledgeAnalyzer getCurrentContent={() => "# CPU"} noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
 
     await act(async () => { click('分析当前笔记'); await Promise.resolve() })
     await act(async () => { click('应用所选候选'); await Promise.resolve() })
@@ -102,7 +112,7 @@ describe('AIHistory refresh notifications', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    await act(async () => { root?.render(<AIKnowledgeAnalyzer content="# CPU" noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+    await act(async () => { root?.render(<AIKnowledgeAnalyzer getCurrentContent={() => "# CPU"} noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
 
     await act(async () => { click('分析当前笔记'); await Promise.resolve() })
     await act(async () => { click('应用所选候选'); await Promise.resolve() })
@@ -117,7 +127,7 @@ describe('AIHistory refresh notifications', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    await act(async () => { root?.render(<AIKnowledgeAnalyzer content="# CPU" noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+    await act(async () => { root?.render(<AIKnowledgeAnalyzer getCurrentContent={() => "# CPU"} noteId="note_1" service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
 
     await act(async () => { click('分析当前笔记'); await Promise.resolve() })
     await act(async () => { click('放弃本次结果'); await Promise.resolve() })

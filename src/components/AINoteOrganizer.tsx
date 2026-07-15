@@ -10,7 +10,7 @@ type NoteResultApplicationService = {
 }
 
 interface AINoteOrganizerProps {
-  content: string
+  getCurrentContent: () => string
   noteId?: string
   onApply: (appliedNote: Note) => void | Promise<void>
   onAIHistoryChanged?: () => void
@@ -20,7 +20,7 @@ interface AINoteOrganizerProps {
 }
 
 export default function AINoteOrganizer({
-  content,
+  getCurrentContent,
   noteId,
   onApply,
   onAIHistoryChanged,
@@ -35,6 +35,7 @@ export default function AINoteOrganizer({
   const requestId = useRef(0)
 
   const generate = async () => {
+    const content = getCurrentContent()
     if (!content.trim()) {
       setStatus('error')
       setError('当前笔记为空，无法进行整理。')
@@ -86,7 +87,7 @@ export default function AINoteOrganizer({
     setIsApplying(true)
     try {
       await beforeApply?.()
-      const applied = await applicationService.applyAIResult(preview.aiResultId, content)
+      const applied = await applicationService.applyAIResult(preview.aiResultId, getCurrentContent())
       if (!applied.applied) {
         setStatus('error')
         setError('整理结果已过期，请重新生成。')

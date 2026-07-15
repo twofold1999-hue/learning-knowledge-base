@@ -75,6 +75,10 @@ export default function EditorPage() {
   const noteLoaded = useRef(false)
   const creationStarted = useRef(false)
   const previewRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef('')
+  const titleRef = useRef('')
+  const linkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const linkRequestId = useRef(0)
 
   if (!editorSaveCoordinator.current) {
     editorSaveCoordinator.current = createEditorSaveCoordinator(
@@ -123,6 +127,31 @@ export default function EditorPage() {
     if (!noteIdToSave) return
     editorSaveCoordinator.current?.schedule(noteIdToSave, changes)
   }, [])
+
+  const getCurrentContent = useCallback(() => contentRef.current, [])
+  const replaceDraftContent = useCallback((nextContent: string) => {
+    contentRef.current = nextContent
+    setContent(nextContent)
+  }, [])
+
+  const scheduleLinkLookup = useCallback((nextContent: string, nextTitle = titleRef.current) => {
+    if (linkTimerRef.current) clearTimeout(linkTimerRef.current)
+    const requestId = ++linkRequestId.current
+    const targetNoteId = actualNoteId.current
+    if (!targetNoteId) {
+      setBacklinks([])
+      setForwardlinks([])
+      return
+    }
+    linkTimerRef.current = setTimeout(() => {
+      void Promise.all([findBacklinks(nextTitle), findForwardlinks(nextContent)]).then(([nextBacklinks, nextForwardlinks]) => {
+        if (requestId === linkRequestId.current && actualNoteId.current === targetNoteId) {
+          setBacklinks(nextBacklinks)
+          setForwardlinks(nextForwardlinks)
+        }
+      })
+    }, 250)
+  }, [])
   const appendVideoAnnotation = useCallback((rawStartSeconds: number, rawEndSeconds: number, rawAnnotation: string) => {
     const startSeconds = Math.max(0, Math.floor(rawStartSeconds))
     const endSeconds = Math.max(startSeconds, Math.floor(rawEndSeconds))
@@ -142,13 +171,15 @@ export default function EditorPage() {
       }
     }
     const entry = `- 🎬 ${timestampMarkdown}${annotation ? `｜${annotation}` : ''}`
-    const nextContent = `${content.trimEnd()}${content.trim() ? '\n\n' : ''}${entry}\n`
-    setContent(nextContent)
+    const currentContent = getCurrentContent()
+    const nextContent = `${currentContent.trimEnd()}${currentContent.trim() ? '\n\n' : ''}${entry}\n`
+    replaceDraftContent(nextContent)
+    scheduleLinkLookup(nextContent)
     setIsEditMode(true)
     setVideoTimestamp(endTimestamp)
     triggerSave({ content: nextContent, videoTimestamp: endTimestamp })
     setBiliStudyMessage(`已插入正文：${range}；续播进度已保存到 ${endTimestamp}`)
-  }, [content, effectiveMediaUrl, triggerSave])
+  }, [effectiveMediaUrl, getCurrentContent, replaceDraftContent, scheduleLinkLookup, triggerSave])
 
   useEffect(() => {
     const nextNoteId = !isNew && noteId ? noteId : null
@@ -165,8 +196,9 @@ export default function EditorPage() {
 
   useEffect(() => {
     if (currentNote && currentNote.id === noteId && !noteLoaded.current) {
+      titleRef.current = currentNote.title
       setTitle(currentNote.title)
-      setContent(currentNote.content)
+      replaceDraftContent(currentNote.content)
       setTags(currentNote.tags)
       setConcepts(currentNote.relatedConcepts)
       setDirectoryId(currentNote.directoryId)
@@ -179,7 +211,7 @@ export default function EditorPage() {
       setIsEditMode(!currentNote.content)
       noteLoaded.current = true
     }
-  }, [currentNote])
+  }, [currentNote, replaceDraftContent])
 
   useEffect(() => {
     setShowVideoPanel(searchParams.get('video') === '1')
@@ -221,21 +253,19 @@ export default function EditorPage() {
 
   useEffect(() => {
     if (!currentNote) {
+      linkRequestId.current += 1
+      if (linkTimerRef.current) clearTimeout(linkTimerRef.current)
       setBacklinks([])
       setForwardlinks([])
       return
     }
-    let cancelled = false
-    const timer = setTimeout(() => {
-      void Promise.all([findBacklinks(title), findForwardlinks(content)]).then(([nextBacklinks, nextForwardlinks]) => {
-        if (!cancelled) {
-          setBacklinks(nextBacklinks)
-          setForwardlinks(nextForwardlinks)
-        }
-      })
-    }, 250)
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [currentNote, title, content])
+    scheduleLinkLookup(getCurrentContent(), titleRef.current)
+  }, [currentNote, getCurrentContent, scheduleLinkLookup])
+
+  useEffect(() => () => {
+    linkRequestId.current += 1
+    if (linkTimerRef.current) clearTimeout(linkTimerRef.current)
+  }, [])
 
   const handlePreviewClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
@@ -258,13 +288,13 @@ export default function EditorPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        triggerSave({ title, content, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
+        triggerSave({ title, content: getCurrentContent(), tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
         void flushPendingSave().catch(() => undefined)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [title, content, tags, concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp, triggerSave, flushPendingSave])
+  }, [title, tags, concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp, triggerSave, flushPendingSave, getCurrentContent])
 
   const handleDelete = async () => {
     const noteIdToDelete = actualNoteId.current
@@ -285,9 +315,10 @@ export default function EditorPage() {
   const handleMarkdownExport = async () => {
     if (!currentNote) return
     try {
+      const contentToExport = getCurrentContent()
       await flushPendingSave()
       await downloadNotesAsMarkdown([{
-        ...currentNote, title, content, tags, relatedConcepts: concepts,
+        ...currentNote, title, content: contentToExport, tags, relatedConcepts: concepts,
         directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp,
       }])
     } catch (error) {
@@ -363,7 +394,9 @@ export default function EditorPage() {
           <button
             onClick={() => {
               if (isEditMode) {
-                triggerSave({ title, content, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
+                const draftContent = getCurrentContent()
+                replaceDraftContent(draftContent)
+                triggerSave({ title, content: draftContent, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
                 void flushPendingSave().catch(() => undefined)
               }
               setIsEditMode(!isEditMode)
@@ -387,7 +420,7 @@ export default function EditorPage() {
           type="text"
           placeholder="笔记标题"
           value={title}
-          onChange={(e) => { setTitle(e.target.value); triggerSave({ title: e.target.value }) }}
+          onChange={(e) => { titleRef.current = e.target.value; setTitle(e.target.value); triggerSave({ title: e.target.value }); scheduleLinkLookup(getCurrentContent(), e.target.value) }}
           style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--ink)', fontSize: '22px', fontWeight: 700, padding: 0, marginBottom: '12px' }}
         />
       ) : (
@@ -536,20 +569,20 @@ export default function EditorPage() {
 
       {isEditMode ? (
         <>
-          {currentNote && <AIKnowledgeAnalyzer content={content} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
+          {currentNote && <AIKnowledgeAnalyzer getCurrentContent={getCurrentContent} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
           {currentNote && <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />}
-          {currentNote && <AINoteOrganizer content={content} noteId={currentNote.id} beforeApply={() => flushPendingSave(currentNote.id)} onApply={(appliedNote) => {
+          {currentNote && <AINoteOrganizer getCurrentContent={getCurrentContent} noteId={currentNote.id} beforeApply={() => flushPendingSave(currentNote.id)} onApply={(appliedNote) => {
             editorSaveCoordinator.current?.replaceCommittedSnapshot(appliedNote.id)
-            setContent(appliedNote.content)
+            replaceDraftContent(appliedNote.content)
             synchronizePersistedNote(appliedNote)
           }} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
           {currentNote && <AIHistoryPanel noteId={currentNote.id} refreshKey={aiHistoryVersion} />}
           <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
           <CodeMirrorEditor
             value={content}
-            onChange={(val) => { setContent(val); triggerSave({ content: val }) }}
+            onChange={(val) => { contentRef.current = val; triggerSave({ content: val }); scheduleLinkLookup(val) }}
             onSave={() => {
-              triggerSave({ title, content, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
+              triggerSave({ title, content: getCurrentContent(), tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
               void flushPendingSave().catch(() => undefined)
             }}
           />

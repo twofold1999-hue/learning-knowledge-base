@@ -3,7 +3,7 @@ import { aiService, type AIKnowledgeCandidates, type AIKnowledgeCandidatesResult
 import { applyKnowledgeCandidates, discardKnowledgeCandidates } from '../services/knowledgeCandidateApplicationService'
 
 interface AIKnowledgeAnalyzerProps {
-  content: string
+  getCurrentContent: () => string
   noteId: string
   service?: Pick<typeof aiService, 'extractKnowledgeCandidates'>
   applicationService?: Pick<typeof import('../services/knowledgeCandidateApplicationService'), 'applyKnowledgeCandidates' | 'discardKnowledgeCandidates'>
@@ -21,7 +21,7 @@ const relationLabels: Record<AIKnowledgeCandidates['relations'][number]['relatio
   related_to: '相关', depends_on: '依赖', contains: '包含', explains: '解释', contrasts_with: '对比', prerequisite: '前置',
 }
 
-export default function AIKnowledgeAnalyzer({ content, noteId, service = aiService, applicationService = { applyKnowledgeCandidates, discardKnowledgeCandidates }, onApplied, onAIHistoryChanged }: AIKnowledgeAnalyzerProps) {
+export default function AIKnowledgeAnalyzer({ getCurrentContent, noteId, service = aiService, applicationService = { applyKnowledgeCandidates, discardKnowledgeCandidates }, onApplied, onAIHistoryChanged }: AIKnowledgeAnalyzerProps) {
   const [status, setStatus] = useState<'idle' | 'generating' | 'success' | 'error'>('idle')
   const [preview, setPreview] = useState<AIKnowledgeCandidatesResult | null>(null)
   const [selectedEntityKeys, setSelectedEntityKeys] = useState<Set<string>>(new Set())
@@ -29,6 +29,7 @@ export default function AIKnowledgeAnalyzer({ content, noteId, service = aiServi
   const [message, setMessage] = useState('')
 
   const generate = async () => {
+    const content = getCurrentContent()
     if (!content.trim()) {
       setStatus('error')
       setMessage('当前笔记为空，无法分析知识结构。')
@@ -89,7 +90,7 @@ export default function AIKnowledgeAnalyzer({ content, noteId, service = aiServi
         aiResultId: preview.aiResultId,
         selectedEntityKeys: [...selectedEntityKeys],
         selectedRelationKeys: [...selectedRelationKeys],
-      }, content)
+      }, getCurrentContent())
       if (!report.applied) {
         setPreview(null)
         setStatus('error')

@@ -52,7 +52,7 @@ function createApplicationService(result: ApplyAIResultReport = { applied: true,
 async function renderOrganizer(
   service: MockService,
   onApply = vi.fn(),
-  content = '# 原始笔记',
+  content: string | (() => string) = '# 原始笔记',
   noteId = appliedNote.id,
   applicationService = createApplicationService(),
   beforeApply?: () => Promise<void>,
@@ -61,7 +61,7 @@ async function renderOrganizer(
   document.body.append(container)
   root = createRoot(container)
   await act(async () => {
-    root?.render(<AINoteOrganizer content={content} noteId={noteId} onApply={onApply} service={service} applicationService={applicationService} beforeApply={beforeApply} />)
+    root?.render(<AINoteOrganizer getCurrentContent={typeof content === 'function' ? content : () => content} noteId={noteId} onApply={onApply} service={service} applicationService={applicationService} beforeApply={beforeApply} />)
   })
   return { onApply, applicationService }
 }
@@ -89,6 +89,21 @@ describe('AINoteOrganizer', () => {
     expect(onApply).toHaveBeenCalledWith(appliedNote)
   })
 
+  it('在生成后应用时读取最新草稿，而不依赖组件重渲染', async () => {
+    let currentContent = '# 草稿 A'
+    const service: MockService = {
+      summarizeNote: vi.fn().mockResolvedValue({ originalContent: '# 草稿 A', result: '## 整理结果', generatedAt: new Date(), aiResultId: 'summary_1' }),
+    }
+    const applicationService = createApplicationService()
+    await renderOrganizer(service, vi.fn(), () => currentContent, appliedNote.id, applicationService)
+
+    await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
+    currentContent = '# 草稿 B'
+    await act(async () => { clickButton('应用整理结果'); await Promise.resolve() })
+
+    expect(service.summarizeNote).toHaveBeenCalledWith('# 草稿 A', { noteId: appliedNote.id })
+    expect(applicationService.applyAIResult).toHaveBeenCalledWith('summary_1', '# 草稿 B')
+  })
   it('放弃结果时委托应用服务，不更新笔记', async () => {
     const service: MockService = {
       summarizeNote: vi.fn().mockResolvedValue({ originalContent: '# 原始笔记', result: '## 整理结果', generatedAt: new Date(), aiResultId: 'summary_1' }),
@@ -181,7 +196,7 @@ describe('AIHistory refresh notifications', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    await act(async () => { root?.render(<AINoteOrganizer content="# 原始笔记" noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
+    await act(async () => { root?.render(<AINoteOrganizer getCurrentContent={() => "# 原始笔记"} noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={applicationService} onAIHistoryChanged={onAIHistoryChanged} />) })
 
     await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
     await act(async () => { clickButton('应用整理结果'); await Promise.resolve() })
@@ -195,7 +210,7 @@ describe('AIHistory refresh notifications', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    await act(async () => { root?.render(<AINoteOrganizer content="# 原始笔记" noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={createApplicationService()} onAIHistoryChanged={onAIHistoryChanged} />) })
+    await act(async () => { root?.render(<AINoteOrganizer getCurrentContent={() => "# 原始笔记"} noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={createApplicationService()} onAIHistoryChanged={onAIHistoryChanged} />) })
 
     await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
     await act(async () => { clickButton('放弃结果'); await Promise.resolve() })
@@ -209,7 +224,7 @@ describe('AIHistory refresh notifications', () => {
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
-    await act(async () => { root?.render(<AINoteOrganizer content="# 原始笔记" noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={createApplicationService()} onAIHistoryChanged={onAIHistoryChanged} />) })
+    await act(async () => { root?.render(<AINoteOrganizer getCurrentContent={() => "# 原始笔记"} noteId={appliedNote.id} onApply={vi.fn()} service={service} applicationService={createApplicationService()} onAIHistoryChanged={onAIHistoryChanged} />) })
 
     await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
 
