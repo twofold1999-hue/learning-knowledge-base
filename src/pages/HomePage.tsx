@@ -7,6 +7,7 @@ import { findOrphanNotes } from '../services/linkService'
 import Heatmap from '../components/Heatmap'
 import NoteCard from '../components/NoteCard'
 import type { Note, NoteFilter } from '../types'
+import { toLocalDateKey } from '../utils/noteCreationFootprint'
 
 type SortBy = 'updated' | 'created' | 'title' | 'type'
 
@@ -35,7 +36,6 @@ export default function HomePage() {
     if (activeTag) filter.tag = activeTag
     if (activeDir) filter.directoryId = activeDir
     if (activeType === 'knowledge_fragment' || activeType === 'course_chapter') filter.type = activeType
-    if (activeDate) filter.createdDate = activeDate
     if (activeConcept) filter.relatedConcept = activeConcept
     void fetchNotes(Object.keys(filter).length > 0 ? filter : undefined)
   }, [fetchNotes, activeTag, activeDir, activeType, activeDate, activeConcept])
@@ -51,7 +51,10 @@ export default function HomePage() {
   }, [orphanMode, allNotes])
 
   const displayNotes = useMemo(() => {
-    const sorted = [...notes].filter((note) => !orphanMode || orphanIds.includes(note.id))
+    const sorted = [...notes].filter((note) => (
+      (!activeDate || toLocalDateKey(note.createdAt) === activeDate)
+      && (!orphanMode || orphanIds.includes(note.id))
+    ))
     sorted.sort((a, b) => {
       if (sortBy === 'created') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       if (sortBy === 'title') return a.title.localeCompare(b.title, 'zh-CN')
@@ -59,7 +62,7 @@ export default function HomePage() {
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     })
     return sorted
-  }, [notes, orphanMode, orphanIds, sortBy])
+  }, [notes, activeDate, orphanMode, orphanIds, sortBy])
 
   const hasFilter = Boolean(activeTag || activeDir || activeType || activeDate || activeConcept || orphanMode)
   const activeDirName = directories.find((d) => d.id === activeDir)?.name
@@ -94,7 +97,7 @@ export default function HomePage() {
           <p>收拢零散知识、学习单元与练习灵感，在一个轻盈而专注的工作台中持续沉淀。</p>
           <div className="home-hero__actions">
             <button className="primary-action" onClick={() => navigate('/editor/new')}>开始记录 <span>↗</span></button>
-            <button className="secondary-action" onClick={() => navigate('/heatmap')}>查看学习足迹</button>
+            <button className="secondary-action" onClick={() => navigate('/heatmap')}>查看笔记创建足迹</button>
           </div>
         </div>
         <div className="hero-metrics" aria-label="知识库统计">

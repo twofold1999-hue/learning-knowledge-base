@@ -95,7 +95,7 @@ export default function Sidebar() {
         <span>🔍</span> 搜索 <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--faint)' }}>Ctrl+K</span>
       </div>
       <div style={{ ...s.navItem, ...(location.pathname === '/heatmap' ? s.navItemActive : {}) }} onClick={() => navigate('/heatmap')}>
-        <span>🔥</span> 学习热力图
+        <span>🔥</span> 笔记创建足迹
       </div>
       <div style={{ ...s.navItem, ...(location.pathname === '/graph' ? s.navItemActive : {}) }} onClick={() => navigate('/graph')}>
         <span>🕸️</span> 知识图谱
