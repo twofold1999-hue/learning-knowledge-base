@@ -55,12 +55,13 @@ async function renderOrganizer(
   content = '# 原始笔记',
   noteId = appliedNote.id,
   applicationService = createApplicationService(),
+  beforeApply?: () => Promise<void>,
 ) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   await act(async () => {
-    root?.render(<AINoteOrganizer content={content} noteId={noteId} onApply={onApply} service={service} applicationService={applicationService} />)
+    root?.render(<AINoteOrganizer content={content} noteId={noteId} onApply={onApply} service={service} applicationService={applicationService} beforeApply={beforeApply} />)
   })
   return { onApply, applicationService }
 }
@@ -128,6 +129,39 @@ describe('AINoteOrganizer', () => {
     expect(container?.querySelector('[role="alert"]')?.textContent).toContain('整理结果已过期')
   })
 
+  it('在调用 AI 应用服务前等待编辑器保存屏障', async () => {
+    let releaseSave!: () => void
+    const beforeApply = vi.fn(() => new Promise<void>((resolve) => { releaseSave = resolve }))
+    const service: MockService = {
+      summarizeNote: vi.fn().mockResolvedValue({ originalContent: '# 原始笔记', result: '## 整理结果', generatedAt: new Date(), aiResultId: 'summary_1' }),
+    }
+    const applicationService = createApplicationService()
+    await renderOrganizer(service, vi.fn(), '# 原始笔记', appliedNote.id, applicationService, beforeApply)
+
+    await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
+    await act(async () => { clickButton('应用整理结果'); await Promise.resolve() })
+
+    expect(beforeApply).toHaveBeenCalledTimes(1)
+    expect(applicationService.applyAIResult).not.toHaveBeenCalled()
+
+    await act(async () => { releaseSave(); await Promise.resolve() })
+    expect(applicationService.applyAIResult).toHaveBeenCalledWith('summary_1', '# 原始笔记')
+  })
+
+  it('保存屏障失败时不调用 AI 应用服务', async () => {
+    const beforeApply = vi.fn().mockRejectedValue(new Error('保存失败，请重试'))
+    const service: MockService = {
+      summarizeNote: vi.fn().mockResolvedValue({ originalContent: '# 原始笔记', result: '## 整理结果', generatedAt: new Date(), aiResultId: 'summary_1' }),
+    }
+    const applicationService = createApplicationService()
+    await renderOrganizer(service, vi.fn(), '# 原始笔记', appliedNote.id, applicationService, beforeApply)
+
+    await act(async () => { clickButton('整理当前笔记'); await Promise.resolve() })
+    await act(async () => { clickButton('应用整理结果'); await Promise.resolve() })
+
+    expect(applicationService.applyAIResult).not.toHaveBeenCalled()
+    expect(container?.querySelector('[role="alert"]')?.textContent).toContain('保存失败，请重试')
+  })
   it('没有持久化笔记 ID 时不生成不可原子应用的结果', async () => {
     const service: MockService = { summarizeNote: vi.fn() }
     await renderOrganizer(service, vi.fn(), '# 原始笔记', '')

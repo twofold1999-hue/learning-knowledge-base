@@ -12,8 +12,9 @@ type NoteResultApplicationService = {
 interface AINoteOrganizerProps {
   content: string
   noteId?: string
-  onApply: (appliedNote: Note) => void
+  onApply: (appliedNote: Note) => void | Promise<void>
   onAIHistoryChanged?: () => void
+  beforeApply?: () => Promise<void>
   service?: NoteOrganizationService
   applicationService?: NoteResultApplicationService
 }
@@ -23,12 +24,14 @@ export default function AINoteOrganizer({
   noteId,
   onApply,
   onAIHistoryChanged,
+  beforeApply,
   service = aiService,
   applicationService = { applyAIResult, discardAIResult },
 }: AINoteOrganizerProps) {
   const [status, setStatus] = useState<AINoteOrganizationStatus>('idle')
   const [preview, setPreview] = useState<AISummarizeResult | null>(null)
   const [error, setError] = useState('')
+  const [isApplying, setIsApplying] = useState(false)
   const requestId = useRef(0)
 
   const generate = async () => {
@@ -79,23 +82,26 @@ export default function AINoteOrganizer({
   }
 
   const apply = async () => {
-    if (!preview?.aiResultId) return
+    if (!preview?.aiResultId || isApplying) return
+    setIsApplying(true)
     try {
+      await beforeApply?.()
       const applied = await applicationService.applyAIResult(preview.aiResultId, content)
       if (!applied.applied) {
         setStatus('error')
         setError('整理结果已过期，请重新生成。')
         return
       }
-      onApply(applied.note)
+      await onApply(applied.note)
       onAIHistoryChanged?.()
       resetPreview()
     } catch (reason) {
       setStatus('error')
       setError(reason instanceof Error ? reason.message : '应用 AI 整理结果失败，请稍后重试。')
+    } finally {
+      setIsApplying(false)
     }
   }
-
   return (
     <section aria-label="AI 笔记整理" style={{ margin: '0 0 16px', padding: '12px', background: 'linear-gradient(135deg, rgba(122,162,247,.11), rgba(187,154,247,.08))', border: '1px solid var(--border)', borderRadius: '10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
@@ -111,7 +117,7 @@ export default function AINoteOrganizer({
           <div><div style={{ color: 'var(--faint)', fontSize: '12px', marginBottom: '5px' }}>原始内容（未改动）</div><pre style={{ margin: 0, maxHeight: '220px', overflow: 'auto', whiteSpace: 'pre-wrap', padding: '9px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '7px', color: 'var(--muted)', fontSize: '12px', lineHeight: 1.55 }}>{preview.originalContent}</pre></div>
           <div><div style={{ color: 'var(--green)', fontSize: '12px', marginBottom: '5px' }}>AI 整理结果 · {preview.generatedAt.toLocaleString()}</div><pre style={{ margin: 0, maxHeight: '220px', overflow: 'auto', whiteSpace: 'pre-wrap', padding: '9px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '7px', color: 'var(--ink)', fontSize: '12px', lineHeight: 1.55 }}>{preview.result}</pre></div>
         </div>
-        <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}><button type="button" onClick={() => { void apply() }} style={{ padding: '7px 10px', borderRadius: '6px', color: '#fff', background: 'var(--accent)', fontSize: '12px' }}>应用整理结果</button><button type="button" onClick={() => { void discard() }} style={{ padding: '7px 10px', borderRadius: '6px', color: 'var(--muted)', background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: '12px' }}>放弃结果</button></div>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}><button type="button" onClick={() => { void apply() }} disabled={isApplying} style={{ padding: '7px 10px', borderRadius: '6px', color: '#fff', background: 'var(--accent)', fontSize: '12px' }}>{isApplying ? '正在应用...' : '应用整理结果'}</button><button type="button" onClick={() => { void discard() }} style={{ padding: '7px 10px', borderRadius: '6px', color: 'var(--muted)', background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: '12px' }}>放弃结果</button></div>
       </div>}
     </section>
   )

@@ -6,6 +6,7 @@ import { useProjectStore } from '../stores/projectStore'
 import { getImage } from '../services/imageService'
 import { renderMarkdownPreview } from '../services/markdownService'
 import { trackPendingSave } from '../services/saveCoordinator'
+import { createEditorSaveCoordinator } from '../services/editorSaveCoordinator'
 import { downloadNotesAsMarkdown } from '../services/exportService'
 import { findBacklinks, findForwardlinks } from '../services/linkService'
 import TagInput from '../components/TagInput'
@@ -69,13 +70,17 @@ export default function EditorPage() {
   const [renderHtml, setRenderHtml] = useState('')
   const [backlinks, setBacklinks] = useState<import('../types').Note[]>([])
   const [forwardlinks, setForwardlinks] = useState<{ title: string; noteId: string | null }[]>([])
-  const debounceTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const pendingSaves = useRef(new Map<string, NoteUpdate>())
+  const editorSaveCoordinator = useRef<ReturnType<typeof createEditorSaveCoordinator> | null>(null)
   const actualNoteId = useRef<string | null>(null)
   const noteLoaded = useRef(false)
   const creationStarted = useRef(false)
   const previewRef = useRef<HTMLDivElement>(null)
 
+  if (!editorSaveCoordinator.current) {
+    editorSaveCoordinator.current = createEditorSaveCoordinator(
+      (targetNoteId, changes) => trackPendingSave(updateNote(targetNoteId, changes)),
+    )
+  }
   const allTags = useMemo(() => Array.from(new Set(allNotes.flatMap((n) => n.tags))), [allNotes])
   const allConcepts = useMemo(() => Array.from(new Set(allNotes.flatMap((n) => n.relatedConcepts))), [allNotes])
   const titleToId = useMemo(() => new Map(allNotes.map((n) => [n.title, n.id])), [allNotes])
@@ -110,37 +115,14 @@ export default function EditorPage() {
   const flushPendingSave = useCallback(async (noteId?: string) => {
     const targetNoteId = noteId ?? actualNoteId.current
     if (!targetNoteId) return
-    const timer = debounceTimers.current.get(targetNoteId)
-    if (timer) {
-      clearTimeout(timer)
-      debounceTimers.current.delete(targetNoteId)
-    }
-    const changes = pendingSaves.current.get(targetNoteId)
-    if (!changes || Object.keys(changes).length === 0) return
-    pendingSaves.current.delete(targetNoteId)
-    try {
-      await updateNote(targetNoteId, changes)
-    } catch (error) {
-      const newerChanges = pendingSaves.current.get(targetNoteId)
-      pendingSaves.current.set(targetNoteId, newerChanges ? { ...changes, ...newerChanges } : changes)
-      throw error
-    }
-  }, [updateNote])
-
-  const trackFlush = useCallback((noteId?: string) => trackPendingSave(flushPendingSave(noteId)), [flushPendingSave])
+    await editorSaveCoordinator.current?.flush(targetNoteId)
+  }, [])
 
   const triggerSave = useCallback((changes: NoteUpdate) => {
     const noteIdToSave = actualNoteId.current
     if (!noteIdToSave) return
-    const pendingChanges = pendingSaves.current.get(noteIdToSave)
-    pendingSaves.current.set(noteIdToSave, pendingChanges ? { ...pendingChanges, ...changes } : changes)
-    const existingTimer = debounceTimers.current.get(noteIdToSave)
-    if (existingTimer) clearTimeout(existingTimer)
-    debounceTimers.current.set(noteIdToSave, setTimeout(() => {
-      void trackFlush(noteIdToSave).catch(() => undefined)
-    }, 800))
-  }, [trackFlush])
-
+    editorSaveCoordinator.current?.schedule(noteIdToSave, changes)
+  }, [])
   const appendVideoAnnotation = useCallback((rawStartSeconds: number, rawEndSeconds: number, rawAnnotation: string) => {
     const startSeconds = Math.max(0, Math.floor(rawStartSeconds))
     const endSeconds = Math.max(startSeconds, Math.floor(rawEndSeconds))
@@ -172,14 +154,14 @@ export default function EditorPage() {
     const nextNoteId = !isNew && noteId ? noteId : null
     const previousNoteId = actualNoteId.current
     if (previousNoteId && previousNoteId !== nextNoteId) {
-      void trackFlush(previousNoteId).catch(() => undefined)
+      void flushPendingSave(previousNoteId).catch(() => undefined)
     }
     actualNoteId.current = nextNoteId
     noteLoaded.current = false
     if (nextNoteId) {
       fetchNote(nextNoteId)
     }
-  }, [isNew, noteId, fetchNote, trackFlush])
+  }, [isNew, noteId, fetchNote, flushPendingSave])
 
   useEffect(() => {
     if (currentNote && currentNote.id === noteId && !noteLoaded.current) {
@@ -269,32 +251,26 @@ export default function EditorPage() {
   }
 
   useEffect(() => () => {
-    const noteIds = new Set([...pendingSaves.current.keys(), ...debounceTimers.current.keys()])
-    for (const timer of debounceTimers.current.values()) clearTimeout(timer)
-    debounceTimers.current.clear()
-    void Promise.allSettled([...noteIds].map((noteId) => trackFlush(noteId)))
-  }, [trackFlush])
-
+    const noteIds = editorSaveCoordinator.current?.trackedNoteIds() ?? []
+    void Promise.allSettled(noteIds.map((targetNoteId) => flushPendingSave(targetNoteId)))
+  }, [flushPendingSave])
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
         triggerSave({ title, content, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
-        void trackFlush().catch(() => undefined)
+        void flushPendingSave().catch(() => undefined)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [title, content, tags, concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp, triggerSave, trackFlush])
+  }, [title, content, tags, concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp, triggerSave, flushPendingSave])
 
   const handleDelete = async () => {
     const noteIdToDelete = actualNoteId.current
     if (!noteIdToDelete) return
     if (confirm('确定删除这篇笔记吗?')) {
-      const timer = debounceTimers.current.get(noteIdToDelete)
-      if (timer) clearTimeout(timer)
-      debounceTimers.current.delete(noteIdToDelete)
-      pendingSaves.current.delete(noteIdToDelete)
+      editorSaveCoordinator.current?.cancelPending(noteIdToDelete)
       await deleteNote(noteIdToDelete)
       navigate('/')
     }
@@ -309,7 +285,7 @@ export default function EditorPage() {
   const handleMarkdownExport = async () => {
     if (!currentNote) return
     try {
-      await trackFlush()
+      await flushPendingSave()
       await downloadNotesAsMarkdown([{
         ...currentNote, title, content, tags, relatedConcepts: concepts,
         directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp,
@@ -388,7 +364,7 @@ export default function EditorPage() {
             onClick={() => {
               if (isEditMode) {
                 triggerSave({ title, content, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
-                void trackFlush().catch(() => undefined)
+                void flushPendingSave().catch(() => undefined)
               }
               setIsEditMode(!isEditMode)
             }}
@@ -562,7 +538,8 @@ export default function EditorPage() {
         <>
           {currentNote && <AIKnowledgeAnalyzer content={content} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
           {currentNote && <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />}
-          {currentNote && <AINoteOrganizer content={content} noteId={currentNote.id} onApply={(appliedNote) => {
+          {currentNote && <AINoteOrganizer content={content} noteId={currentNote.id} beforeApply={() => flushPendingSave(currentNote.id)} onApply={(appliedNote) => {
+            editorSaveCoordinator.current?.replaceCommittedSnapshot(appliedNote.id)
             setContent(appliedNote.content)
             synchronizePersistedNote(appliedNote)
           }} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
@@ -573,7 +550,7 @@ export default function EditorPage() {
             onChange={(val) => { setContent(val); triggerSave({ content: val }) }}
             onSave={() => {
               triggerSave({ title, content, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
-              void trackFlush().catch(() => undefined)
+              void flushPendingSave().catch(() => undefined)
             }}
           />
           </Suspense>
