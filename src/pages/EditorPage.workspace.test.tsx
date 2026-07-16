@@ -163,11 +163,64 @@ describe('EditorPage workspace controls and local save state', () => {
     expect(container?.textContent).toContain('已保存')
   })
 
+  it('keeps the assistant panel closed by default, then persists its open state without remounting CodeMirror', async () => {
+    await renderPage()
+    await act(async () => { button('开始编辑') })
+    const initialMounts = mocks.editorMounts
+    expect(container?.querySelector('[data-editor-assistant-panel]')).toBeNull()
+
+    await act(async () => { button('打开辅助面板') })
+    expect(container?.querySelector('[data-editor-assistant-panel]')).not.toBeNull()
+    expect(container?.textContent).toContain('概览')
+    expect(container?.textContent).toContain('暂无辅助内容')
+    expect(localStorage.getItem('learning-knowledge-base.editor-assistant-panel.v1')).toBe('open')
+    expect(mocks.editorMounts).toBe(initialMounts)
+
+    await act(async () => { button('关闭辅助面板') })
+    expect(container?.querySelector('[data-editor-assistant-panel]')).toBeNull()
+    expect(mocks.editorMounts).toBe(initialMounts)
+  })
+
+  it('restores only the persisted open assistant-panel preference after remounting', async () => {
+    localStorage.setItem('learning-knowledge-base.editor-assistant-panel.v1', 'unexpected')
+    await renderPage()
+    expect(container?.querySelector('[data-editor-assistant-panel]')).toBeNull()
+
+    await act(async () => { button('打开辅助面板') })
+    await act(async () => { root?.unmount() })
+    container?.remove()
+
+    await renderPage()
+    expect(container?.querySelector('[data-editor-assistant-panel]')).not.toBeNull()
+  })
+  it('keeps an open assistant panel hidden during focus mode and restores it afterwards', async () => {
+    await renderPage()
+    await act(async () => { button('打开辅助面板') })
+    await act(async () => { button('进入专注模式') })
+    expect(container?.querySelector('[data-editor-assistant-panel]')?.classList.contains('editor-assistant-panel--focus-hidden')).toBe(true)
+
+    await act(async () => { button('退出专注模式') })
+    expect(container?.querySelector('[data-editor-assistant-panel]')?.classList.contains('editor-assistant-panel--focus-hidden')).toBe(false)
+  })
+
+  it('does not add a save when the assistant panel opens and closes around a pending draft', async () => {
+    vi.useFakeTimers()
+    await renderPage()
+    await act(async () => { button('开始编辑') })
+    await act(async () => { button('输入第一版草稿') })
+    await act(async () => { button('打开辅助面板') })
+    await act(async () => { button('关闭辅助面板') })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(mocks.updateNote).toHaveBeenCalledTimes(1)
+    expect(mocks.updateNote).toHaveBeenCalledWith('workspace-note', { content: '# 第一版草稿' })
+  })
+
   it('keeps only the compact save status in sidepanel mode', async () => {
     await renderPage('/editor/workspace-note?sidepanel=1')
     expect(container?.textContent).toContain('已保存')
     expect(() => button('切换到宽屏')).toThrow()
     expect(() => button('进入专注模式')).toThrow()
     expect(() => button('删除笔记')).toThrow()
+    expect(() => button('打开辅助面板')).toThrow()
   })
 })

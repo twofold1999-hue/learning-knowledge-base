@@ -136,6 +136,18 @@ describe('EditorPage draft render boundary', () => {
     expect(document.body.dataset.knowledgeDraft).toBe('# 草稿 B')
   })
 
+  it('keeps read-only auxiliary panels stable while the assistant container opens and closes', async () => {
+    await renderPage()
+    await act(async () => { click('✏️ 编辑') })
+    const initialHistoryRenders = mocks.historyRenders
+    const initialOverviewRenders = mocks.overviewRenders
+
+    await act(async () => { click('辅助面板') })
+    await act(async () => { click('关闭') })
+
+    expect(mocks.historyRenders).toBe(initialHistoryRenders)
+    expect(mocks.overviewRenders).toBe(initialOverviewRenders)
+  })
   it('renders the latest unsaved draft immediately in preview and keeps a 250 KiB edit outside auxiliary render work', async () => {
     mocks.renderMarkdownPreview.mockResolvedValue('<h1>草稿 B</h1>')
     await renderPage()

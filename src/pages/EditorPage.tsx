@@ -18,6 +18,7 @@ import {
 } from '../services/noteLinkIndex'
 import './editorWorkspace.css'
 import EditorSaveStatus, { type EditorSavePhase } from '../components/EditorSaveStatus'
+import EditorSidePanel from '../components/EditorSidePanel'
 import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
 import Outline from '../components/Outline'
@@ -33,6 +34,16 @@ import type { Note, NoteType, NoteUpdate } from '../types'
 const CodeMirrorEditor = lazy(() => import('../components/CodeMirrorEditor'))
 
 const EDITOR_WIDTH_STORAGE_KEY = 'learning-knowledge-base.editor-width.v1'
+const EDITOR_ASSISTANT_PANEL_STORAGE_KEY = 'learning-knowledge-base.editor-assistant-panel.v1'
+
+function readAssistantPanelOpen(): boolean {
+  try {
+    return window.localStorage.getItem(EDITOR_ASSISTANT_PANEL_STORAGE_KEY) === 'open'
+  } catch {
+    return false
+  }
+}
+
 type EditorWidthMode = 'comfortable' | 'wide'
 
 function readEditorWidthMode(): EditorWidthMode {
@@ -98,6 +109,7 @@ export default function EditorPage() {
   const [forwardlinks, setForwardlinks] = useState<{ title: string; noteId: string | null }[]>([])
   const [editorWidthMode, setEditorWidthMode] = useState<EditorWidthMode>(readEditorWidthMode)
   const [isFocusMode, setIsFocusMode] = useState(false)
+  const [isAssistantPanelOpen, setIsAssistantPanelOpen] = useState(readAssistantPanelOpen)
   const [editorSaveState, setEditorSaveState] = useState<{ noteId: string | null; phase: EditorSavePhase }>({ noteId: null, phase: 'saved' })
   const editorSaveCoordinator = useRef<ReturnType<typeof createEditorSaveCoordinator> | null>(null)
   const actualNoteId = useRef<string | null>(null)
@@ -193,6 +205,11 @@ export default function EditorPage() {
     setEditorWidthMode(nextWidthMode)
     try { window.localStorage.setItem(EDITOR_WIDTH_STORAGE_KEY, nextWidthMode) } catch { /* Storage can be unavailable. */ }
   }, [])
+  const setAssistantPanelOpen = useCallback((nextOpen: boolean) => {
+    setIsAssistantPanelOpen(nextOpen)
+    try { window.localStorage.setItem(EDITOR_ASSISTANT_PANEL_STORAGE_KEY, nextOpen ? 'open' : 'closed') } catch { /* Storage can be unavailable. */ }
+  }, [])
+
   const replaceDraftContent = useCallback((nextContent: string) => {
     contentRef.current = nextContent
     setContent(nextContent)
@@ -538,6 +555,9 @@ export default function EditorPage() {
               <button type="button" className={`editor-workspace__button editor-workspace__button--subtle${editorWidthMode === 'wide' ? ' editor-workspace__button--active' : ''}`} onClick={() => setWidthMode('wide')} aria-pressed={editorWidthMode === 'wide'} aria-label="切换到宽屏">宽屏</button>
             </div>
             <button type="button" className="editor-workspace__button editor-workspace__button--subtle" onClick={() => setIsFocusMode((value) => !value)} aria-pressed={isFocusMode} aria-label={isFocusMode ? '退出专注模式' : '进入专注模式'}>{isFocusMode ? '退出专注' : '专注模式'}</button>
+            {!isAssistantPanelOpen && (
+              <button type="button" className="editor-workspace__button editor-workspace__button--subtle" onClick={() => setAssistantPanelOpen(true)} aria-label="打开辅助面板">辅助面板</button>
+            )}
             <button
               type="button"
               className={`editor-workspace__button${isEditMode ? ' editor-workspace__button--subtle' : ' editor-workspace__button--active'}`}
@@ -562,6 +582,7 @@ export default function EditorPage() {
         <div className="editor-workspace__sidepanel-status"><EditorSaveStatus phase={visibleSavePhase} onRetry={retryCurrentSave} compact /></div>
       )}
 
+      <div className={`editor-workspace__body${isAssistantPanelOpen && !isSidePanel && !isFocusMode ? ' editor-workspace__body--panel-open' : ''}`}>
       <div className="editor-workspace__column">
       {isEditMode ? (
         <input
@@ -798,6 +819,12 @@ export default function EditorPage() {
       {!isEditMode && <Outline content={content} onJump={handleJumpHeading} />}
       </div>
       </div>
+      <EditorSidePanel
+        isOpen={isAssistantPanelOpen && !isSidePanel}
+        isFocusHidden={isFocusMode}
+        onClose={() => setAssistantPanelOpen(false)}
+      />
       </div>
+    </div>
   )
 }
