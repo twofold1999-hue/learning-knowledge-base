@@ -231,7 +231,7 @@ export default function CodeMirrorEditor({ value, onChange, onSave }: Props) {
   )
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+    <div className="markdown-editor" style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
       {imageError && (
         <div role="alert" style={{ padding: '8px 12px', background: 'rgba(247,118,142,0.12)', color: 'var(--red)', fontSize: '13px' }}>
           {imageError}

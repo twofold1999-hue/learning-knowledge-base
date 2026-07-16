@@ -16,6 +16,8 @@ import {
   type Forwardlink,
   type NoteLinkQueryState,
 } from '../services/noteLinkIndex'
+import './editorWorkspace.css'
+import EditorSaveStatus, { type EditorSavePhase } from '../components/EditorSaveStatus'
 import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
 import Outline from '../components/Outline'
@@ -29,6 +31,17 @@ import { getTagColor } from '../utils/tagColors'
 import type { Note, NoteType, NoteUpdate } from '../types'
 
 const CodeMirrorEditor = lazy(() => import('../components/CodeMirrorEditor'))
+
+const EDITOR_WIDTH_STORAGE_KEY = 'learning-knowledge-base.editor-width.v1'
+type EditorWidthMode = 'comfortable' | 'wide'
+
+function readEditorWidthMode(): EditorWidthMode {
+  try {
+    return window.localStorage.getItem(EDITOR_WIDTH_STORAGE_KEY) === 'wide' ? 'wide' : 'comfortable'
+  } catch {
+    return 'comfortable'
+  }
+}
 
 function haveSameBacklinks(current: Note[], next: Note[]): boolean {
   return current.length === next.length && current.every((note, index) => note.id === next[index]?.id)
@@ -52,8 +65,6 @@ export default function EditorPage() {
 
   const currentNote = useNoteStore((s) => s.currentNote)
   const isLoading = useNoteStore((s) => s.isLoading)
-  const isSaving = useNoteStore((s) => s.isSaving)
-  const saveError = useNoteStore((s) => s.saveError)
   const fetchNote = useNoteStore((s) => s.fetchNote)
   const createNote = useNoteStore((s) => s.createNote)
   const updateNote = useNoteStore((s) => s.updateNote)
@@ -85,6 +96,9 @@ export default function EditorPage() {
   const [renderHtml, setRenderHtml] = useState('')
   const [backlinks, setBacklinks] = useState<import('../types').Note[]>([])
   const [forwardlinks, setForwardlinks] = useState<{ title: string; noteId: string | null }[]>([])
+  const [editorWidthMode, setEditorWidthMode] = useState<EditorWidthMode>(readEditorWidthMode)
+  const [isFocusMode, setIsFocusMode] = useState(false)
+  const [editorSaveState, setEditorSaveState] = useState<{ noteId: string | null; phase: EditorSavePhase }>({ noteId: null, phase: 'saved' })
   const editorSaveCoordinator = useRef<ReturnType<typeof createEditorSaveCoordinator> | null>(null)
   const actualNoteId = useRef<string | null>(null)
   const noteLoaded = useRef(false)
@@ -95,11 +109,38 @@ export default function EditorPage() {
   const linkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const linkRequestId = useRef(0)
   const lastLinkQueryRef = useRef<NoteLinkQueryState | null>(null)
+  const isMountedRef = useRef(true)
+  const saveRevisionRef = useRef(new Map<string, number>())
+
+  const setEditorSavePhase = useCallback((targetNoteId: string, phase: EditorSavePhase) => {
+    if (isMountedRef.current && actualNoteId.current === targetNoteId) {
+      setEditorSaveState({ noteId: targetNoteId, phase })
+    }
+  }, [])
+
+  const markEditorSavePending = useCallback((targetNoteId: string) => {
+    const nextRevision = (saveRevisionRef.current.get(targetNoteId) ?? 0) + 1
+    saveRevisionRef.current.set(targetNoteId, nextRevision)
+    setEditorSavePhase(targetNoteId, 'pending')
+  }, [setEditorSavePhase])
 
 
   if (!editorSaveCoordinator.current) {
     editorSaveCoordinator.current = createEditorSaveCoordinator(
-      (targetNoteId, changes) => trackPendingSave(updateNote(targetNoteId, changes)),
+      async (targetNoteId, changes) => {
+        const writeRevision = saveRevisionRef.current.get(targetNoteId) ?? 0
+        setEditorSavePhase(targetNoteId, 'saving')
+        try {
+          await trackPendingSave(updateNote(targetNoteId, changes))
+          setEditorSavePhase(
+            targetNoteId,
+            saveRevisionRef.current.get(targetNoteId) === writeRevision ? 'saved' : 'pending',
+          )
+        } catch (error) {
+          setEditorSavePhase(targetNoteId, 'error')
+          throw error
+        }
+      },
     )
   }
   const allTags = useMemo(() => Array.from(new Set(allNotes.flatMap((n) => n.tags))), [allNotes])
@@ -143,14 +184,71 @@ export default function EditorPage() {
   const triggerSave = useCallback((changes: NoteUpdate) => {
     const noteIdToSave = actualNoteId.current
     if (!noteIdToSave) return
+    markEditorSavePending(noteIdToSave)
     editorSaveCoordinator.current?.schedule(noteIdToSave, changes)
-  }, [])
+  }, [markEditorSavePending])
 
   const getCurrentContent = useCallback(() => contentRef.current, [])
+  const setWidthMode = useCallback((nextWidthMode: EditorWidthMode) => {
+    setEditorWidthMode(nextWidthMode)
+    try { window.localStorage.setItem(EDITOR_WIDTH_STORAGE_KEY, nextWidthMode) } catch { /* Storage can be unavailable. */ }
+  }, [])
   const replaceDraftContent = useCallback((nextContent: string) => {
     contentRef.current = nextContent
     setContent(nextContent)
   }, [])
+
+  const retryCurrentSave = useCallback(() => {
+    const targetNoteId = actualNoteId.current
+    if (!targetNoteId) return
+    triggerSave({
+      title,
+      content: getCurrentContent(),
+      tags,
+      relatedConcepts: concepts,
+      directoryId,
+      projectId,
+      courseId,
+      chapterOrder,
+      sourceLocation,
+      mediaUrl,
+      videoTimestamp,
+    })
+    void flushPendingSave(targetNoteId).catch(() => undefined)
+  }, [chapterOrder, concepts, courseId, directoryId, flushPendingSave, getCurrentContent, mediaUrl, projectId, sourceLocation, tags, title, triggerSave, videoTimestamp])
+
+  const visibleSavePhase: EditorSavePhase = editorSaveState.noteId === currentNote?.id
+    ? editorSaveState.phase
+    : 'saved'
+
+  const handleAIResultApplied = useCallback((appliedNote: Note) => {
+    editorSaveCoordinator.current?.replaceCommittedSnapshot(appliedNote.id)
+    replaceDraftContent(appliedNote.content)
+    synchronizePersistedNote(appliedNote)
+    saveRevisionRef.current.set(appliedNote.id, 0)
+    setEditorSavePhase(appliedNote.id, 'saved')
+  }, [replaceDraftContent, setEditorSavePhase, synchronizePersistedNote])
+
+  const aiAuxiliaryPanels = useMemo(() => {
+    if (!currentNote) return null
+    return <>
+      <AIKnowledgeAnalyzer
+        getCurrentContent={getCurrentContent}
+        noteId={currentNote.id}
+        onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)}
+        onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)}
+      />
+      <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />
+      <AINoteOrganizer
+        getCurrentContent={getCurrentContent}
+        noteId={currentNote.id}
+        beforeApply={() => flushPendingSave(currentNote.id)}
+        onApply={handleAIResultApplied}
+        onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)}
+      />
+      <AIHistoryPanel noteId={currentNote.id} refreshKey={aiHistoryVersion} />
+    </>
+  }, [aiHistoryVersion, currentNote?.id, flushPendingSave, getCurrentContent, handleAIResultApplied, knowledgeOverviewVersion])
 
   const scheduleLinkLookup = useCallback((nextContent: string, nextTitle = titleRef.current) => {
     if (linkTimerRef.current) clearTimeout(linkTimerRef.current)
@@ -207,6 +305,11 @@ export default function EditorPage() {
   }, [effectiveMediaUrl, getCurrentContent, replaceDraftContent, scheduleLinkLookup, triggerSave])
 
   useEffect(() => {
+    isMountedRef.current = true
+    return () => { isMountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
     const nextNoteId = !isNew && noteId ? noteId : null
     const previousNoteId = actualNoteId.current
     if (previousNoteId && previousNoteId !== nextNoteId) {
@@ -234,6 +337,8 @@ export default function EditorPage() {
       setMediaUrl(currentNote.mediaUrl)
       setVideoTimestamp(currentNote.videoTimestamp)
       setIsEditMode(!currentNote.content)
+      saveRevisionRef.current.set(currentNote.id, 0)
+      setEditorSaveState({ noteId: currentNote.id, phase: 'saved' })
       noteLoaded.current = true
     }
   }, [currentNote, replaceDraftContent])
@@ -416,47 +521,61 @@ export default function EditorPage() {
   if (!isNew && !isLoading && !currentNote) return <div style={{ textAlign: 'center', padding: '80px', color: 'var(--muted)' }}>笔记不存在或已被删除</div>
 
   return (
-    <div style={{ maxWidth: isSidePanel ? 'none' : isEditMode ? '1320px' : '920px', margin: '0 auto', transition: 'max-width .18s ease' }}>
-      {!isSidePanel && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-        <button onClick={() => navigate(-1)} style={{ fontSize: '14px', color: 'var(--muted)', padding: '4px 8px' }}>← 返回</button>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ fontSize: '13px', color: 'var(--faint)' }}>{saveError ? '保存失败' : isSaving ? '保存中...' : '已保存'}</span>
-          <button
-            onClick={() => {
-              if (isEditMode) {
-                const draftContent = getCurrentContent()
-                replaceDraftContent(draftContent)
-                triggerSave({ title, content: draftContent, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
-                void flushPendingSave().catch(() => undefined)
-              }
-              setIsEditMode(!isEditMode)
-            }}
-            style={{
-              padding: '6px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 500,
-              background: isEditMode ? 'var(--surface)' : 'var(--accent)',
-              color: isEditMode ? 'var(--ink)' : '#fff',
-              border: '1px solid ' + (isEditMode ? 'var(--border)' : 'var(--accent)'),
-            }}
-          >
-            {isEditMode ? '👁 预览' : '✏️ 编辑'}
-          </button>
-          <button onClick={() => { void handleMarkdownExport() }} style={{ padding: '6px 10px', fontSize: '13px', color: 'var(--muted)', borderRadius: '6px' }}>导出 .md</button>
-          <button onClick={handleDelete} style={{ padding: '6px 10px', fontSize: '13px', color: 'var(--red)', borderRadius: '6px' }}>删除</button>
-        </div>
-      </div>}
+    <div
+      className={`editor-workspace${isSidePanel ? ' editor-workspace--sidepanel' : ''}`}
+      data-editor-width={isSidePanel ? 'sidepanel' : editorWidthMode}
+      data-editor-focus={isFocusMode ? 'true' : 'false'}
+    >
+      {!isSidePanel ? (
+        <header className="editor-workspace__header">
+          <div className="editor-workspace__header-main">
+            <button type="button" className="editor-workspace__button" onClick={() => navigate(-1)} aria-label="返回上一页">← 返回</button>
+            <EditorSaveStatus phase={visibleSavePhase} onRetry={retryCurrentSave} />
+          </div>
+          <div className="editor-workspace__header-actions">
+            <div className="editor-workspace__control-group" role="group" aria-label="正文宽度">
+              <button type="button" className={`editor-workspace__button editor-workspace__button--subtle${editorWidthMode === 'comfortable' ? ' editor-workspace__button--active' : ''}`} onClick={() => setWidthMode('comfortable')} aria-pressed={editorWidthMode === 'comfortable'} aria-label="切换到舒适宽度">舒适宽度</button>
+              <button type="button" className={`editor-workspace__button editor-workspace__button--subtle${editorWidthMode === 'wide' ? ' editor-workspace__button--active' : ''}`} onClick={() => setWidthMode('wide')} aria-pressed={editorWidthMode === 'wide'} aria-label="切换到宽屏">宽屏</button>
+            </div>
+            <button type="button" className="editor-workspace__button editor-workspace__button--subtle" onClick={() => setIsFocusMode((value) => !value)} aria-pressed={isFocusMode} aria-label={isFocusMode ? '退出专注模式' : '进入专注模式'}>{isFocusMode ? '退出专注' : '专注模式'}</button>
+            <button
+              type="button"
+              className={`editor-workspace__button${isEditMode ? ' editor-workspace__button--subtle' : ' editor-workspace__button--active'}`}
+              aria-label={isEditMode ? '切换到预览' : '开始编辑'}
+              onClick={() => {
+                if (isEditMode) {
+                  const draftContent = getCurrentContent()
+                  replaceDraftContent(draftContent)
+                  triggerSave({ title, content: draftContent, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
+                  void flushPendingSave().catch(() => undefined)
+                }
+                setIsEditMode(!isEditMode)
+              }}
+            >
+              {isEditMode ? '👁 预览' : '✏️ 编辑'}
+            </button>
+            <button type="button" className="editor-workspace__button" onClick={() => { void handleMarkdownExport() }}>导出 .md</button>
+            <button type="button" className="editor-workspace__button editor-workspace__button--danger" onClick={handleDelete} aria-label="删除笔记">删除</button>
+          </div>
+        </header>
+      ) : (
+        <div className="editor-workspace__sidepanel-status"><EditorSaveStatus phase={visibleSavePhase} onRetry={retryCurrentSave} compact /></div>
+      )}
 
+      <div className="editor-workspace__column">
       {isEditMode ? (
         <input
           type="text"
           placeholder="笔记标题"
           value={title}
           onChange={(e) => { titleRef.current = e.target.value; setTitle(e.target.value); triggerSave({ title: e.target.value }); scheduleLinkLookup(getCurrentContent(), e.target.value) }}
-          style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--ink)', fontSize: '22px', fontWeight: 700, padding: 0, marginBottom: '12px' }}
+          className="editor-workspace__title"
         />
       ) : (
-        <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--ink)', marginBottom: '12px' }}>{title || '无标题'}</h1>
+        <h1 className="editor-workspace__title">{title || '无标题'}</h1>
       )}
 
+      <div className={`editor-workspace__low-priority${isFocusMode ? ' editor-workspace__low-priority--hidden' : ''}`} data-editor-auxiliary aria-hidden={isFocusMode}>
       {currentNote && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
           <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
@@ -597,16 +716,12 @@ export default function EditorPage() {
         )}
       </div>
 
+      </div>
       {isEditMode ? (
         <>
-          {currentNote && <AIKnowledgeAnalyzer getCurrentContent={getCurrentContent} noteId={currentNote.id} onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
-          {currentNote && <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />}
-          {currentNote && <AINoteOrganizer getCurrentContent={getCurrentContent} noteId={currentNote.id} beforeApply={() => flushPendingSave(currentNote.id)} onApply={(appliedNote) => {
-            editorSaveCoordinator.current?.replaceCommittedSnapshot(appliedNote.id)
-            replaceDraftContent(appliedNote.content)
-            synchronizePersistedNote(appliedNote)
-          }} onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)} />}
-          {currentNote && <AIHistoryPanel noteId={currentNote.id} refreshKey={aiHistoryVersion} />}
+          <div className={`editor-workspace__low-priority${isFocusMode ? ' editor-workspace__low-priority--hidden' : ''}`} data-editor-auxiliary aria-hidden={isFocusMode}>
+          {aiAuxiliaryPanels}
+          </div>
           <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
           <CodeMirrorEditor
             value={content}
@@ -633,6 +748,7 @@ export default function EditorPage() {
         )
       )}
 
+      <div className={`editor-workspace__low-priority${isFocusMode ? ' editor-workspace__low-priority--hidden' : ''}`} data-editor-auxiliary aria-hidden={isFocusMode}>
       <div style={{ marginTop: '24px', paddingBottom: '40px' }}>
         <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--faint)', marginBottom: '6px' }}>关联概念</div>
         {isEditMode ? (
@@ -680,6 +796,8 @@ export default function EditorPage() {
         </section>
       )}
       {!isEditMode && <Outline content={content} onJump={handleJumpHeading} />}
-    </div>
+      </div>
+      </div>
+      </div>
   )
 }
