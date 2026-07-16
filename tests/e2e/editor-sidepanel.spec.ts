@@ -124,8 +124,8 @@ test('opens a desktop assistant panel without replacing editor content and persi
   await expect(panel).toHaveCount(0)
   await page.getByRole('button', { name: '打开辅助面板' }).click()
   await expect(panel).toBeVisible()
-  await expect(panel).toContainText('暂无辅助内容')
-  await expect(panel).not.toContainText('AI 整理笔记')
+  await expect(panel.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true')
+  await expect(panel).toContainText('知识结构')
 
   const panelBox = await panel.boundingBox()
   const editorColumnBox = await page.locator('.editor-workspace__column').boundingBox()

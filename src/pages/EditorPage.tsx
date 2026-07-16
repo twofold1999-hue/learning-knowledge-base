@@ -18,7 +18,7 @@ import {
 } from '../services/noteLinkIndex'
 import './editorWorkspace.css'
 import EditorSaveStatus, { type EditorSavePhase } from '../components/EditorSaveStatus'
-import EditorSidePanel from '../components/EditorSidePanel'
+import EditorSidePanel, { type EditorAssistantTab, type EditorAssistantTabDefinition } from '../components/EditorSidePanel'
 import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
 import Outline from '../components/Outline'
@@ -45,6 +45,14 @@ function readAssistantPanelOpen(): boolean {
 }
 
 type EditorWidthMode = 'comfortable' | 'wide'
+
+const EDITOR_ASSISTANT_TABS: readonly EditorAssistantTabDefinition[] = [
+  { id: 'overview', label: '概览' },
+  { id: 'history', label: '历史' },
+  { id: 'outline', label: '目录' },
+  { id: 'links', label: '链接' },
+  { id: 'ai', label: 'AI整理' },
+]
 
 function readEditorWidthMode(): EditorWidthMode {
   try {
@@ -110,6 +118,7 @@ export default function EditorPage() {
   const [editorWidthMode, setEditorWidthMode] = useState<EditorWidthMode>(readEditorWidthMode)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [isAssistantPanelOpen, setIsAssistantPanelOpen] = useState(readAssistantPanelOpen)
+  const [assistantTab, setAssistantTab] = useState<EditorAssistantTab>('overview')
   const [editorSaveState, setEditorSaveState] = useState<{ noteId: string | null; phase: EditorSavePhase }>({ noteId: null, phase: 'saved' })
   const editorSaveCoordinator = useRef<ReturnType<typeof createEditorSaveCoordinator> | null>(null)
   const actualNoteId = useRef<string | null>(null)
@@ -246,26 +255,13 @@ export default function EditorPage() {
     setEditorSavePhase(appliedNote.id, 'saved')
   }, [replaceDraftContent, setEditorSavePhase, synchronizePersistedNote])
 
-  const aiAuxiliaryPanels = useMemo(() => {
-    if (!currentNote) return null
-    return <>
-      <AIKnowledgeAnalyzer
-        getCurrentContent={getCurrentContent}
-        noteId={currentNote.id}
-        onApplied={() => setKnowledgeOverviewVersion((version) => version + 1)}
-        onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)}
-      />
-      <KnowledgeOverviewPanel noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />
-      <AINoteOrganizer
-        getCurrentContent={getCurrentContent}
-        noteId={currentNote.id}
-        beforeApply={() => flushPendingSave(currentNote.id)}
-        onApply={handleAIResultApplied}
-        onAIHistoryChanged={() => setAIHistoryVersion((version) => version + 1)}
-      />
-      <AIHistoryPanel noteId={currentNote.id} refreshKey={aiHistoryVersion} />
-    </>
-  }, [aiHistoryVersion, currentNote?.id, flushPendingSave, getCurrentContent, handleAIResultApplied, knowledgeOverviewVersion])
+  const handleKnowledgeOverviewChanged = useCallback(() => {
+    setKnowledgeOverviewVersion((version) => version + 1)
+  }, [])
+
+  const handleAIHistoryChanged = useCallback(() => {
+    setAIHistoryVersion((version) => version + 1)
+  }, [])
 
   const scheduleLinkLookup = useCallback((nextContent: string, nextTitle = titleRef.current) => {
     if (linkTimerRef.current) clearTimeout(linkTimerRef.current)
@@ -458,11 +454,11 @@ export default function EditorPage() {
     }
   }
 
-  const handleJumpHeading = (heading: string) => {
+  const handleJumpHeading = useCallback((heading: string) => {
     const element = [...document.querySelectorAll('.markdown-preview h1, .markdown-preview h2, .markdown-preview h3, .markdown-preview h4')]
       .find((candidate) => candidate.textContent?.trim() === heading)
     element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  }, [])
 
   const handleMarkdownExport = async () => {
     if (!currentNote) return
@@ -488,6 +484,91 @@ export default function EditorPage() {
       : '未检测到学习扩展。请先按 browser-extension/README.md 安装扩展。')
   }
 
+  const overviewPanel = useMemo(() => currentNote ? (
+    <KnowledgeOverviewPanel key={currentNote.id} noteId={currentNote.id} refreshKey={knowledgeOverviewVersion} />
+  ) : null, [currentNote?.id, knowledgeOverviewVersion])
+
+  const historyPanel = useMemo(() => currentNote ? (
+    <AIHistoryPanel key={currentNote.id} noteId={currentNote.id} refreshKey={aiHistoryVersion} />
+  ) : null, [aiHistoryVersion, currentNote?.id])
+
+  const aiPanel = useMemo(() => currentNote ? (
+    <>
+      <AIKnowledgeAnalyzer
+        key={`knowledge-${currentNote.id}`}
+        getCurrentContent={getCurrentContent}
+        noteId={currentNote.id}
+        onApplied={handleKnowledgeOverviewChanged}
+        onAIHistoryChanged={handleAIHistoryChanged}
+      />
+      <AINoteOrganizer
+        key={`organizer-${currentNote.id}`}
+        getCurrentContent={getCurrentContent}
+        noteId={currentNote.id}
+        beforeApply={() => flushPendingSave(currentNote.id)}
+        onApply={handleAIResultApplied}
+        onAIHistoryChanged={handleAIHistoryChanged}
+      />
+    </>
+  ) : null, [currentNote?.id, flushPendingSave, getCurrentContent, handleAIHistoryChanged, handleAIResultApplied, handleKnowledgeOverviewChanged])
+
+  const linksPanel = useMemo(() => (
+    <>
+      <section className="editor-assistant-panel__section" data-editor-assistant-links>
+        <div className="editor-assistant-panel__section-title">关联概念</div>
+        {isEditMode ? (
+          <>
+            <WeakLinkEditor concepts={concepts} suggestions={allConcepts} onChange={(newConcepts) => { setConcepts(newConcepts); triggerSave({ relatedConcepts: newConcepts }) }} />
+            <div className="editor-assistant-panel__hint">
+              提示: 在内容中输入 <code>{'[[笔记标题]]'}</code> 可以链接到其他笔记
+            </div>
+          </>
+        ) : (
+          concepts.length > 0 ? (
+            <div className="editor-assistant-panel__link-list">
+              {concepts.map((concept) => (
+                <button
+                  key={concept}
+                  type="button"
+                  onClick={() => navigate(`/?concept=${encodeURIComponent(concept)}`)}
+                  title={`查看关联「${concept}」的项目片段`}
+                  className="editor-assistant-panel__concept-link"
+                >
+                  → {concept}
+                </button>
+              ))}
+            </div>
+          ) : <span className="editor-assistant-panel__empty">无关联概念</span>
+        )}
+      </section>
+      {!isEditMode && (backlinks.length > 0 || forwardlinks.length > 0) && (
+        <section className="editor-assistant-panel__section editor-assistant-panel__link-groups">
+          {backlinks.length > 0 && (
+            <div>
+              <div className="editor-assistant-panel__section-title">🔗 反向链接 ({backlinks.length})</div>
+              <div className="editor-assistant-panel__link-list">
+                {backlinks.map((linkedNote) => <button key={linkedNote.id} type="button" onClick={() => navigate(`/editor/${encodeURIComponent(linkedNote.id)}`)} className="editor-assistant-panel__backlink">{linkedNote.title}</button>)}
+              </div>
+            </div>
+          )}
+          {forwardlinks.length > 0 && (
+            <div>
+              <div className="editor-assistant-panel__section-title">↗ 正向链接 ({forwardlinks.length})</div>
+              <div className="editor-assistant-panel__link-list">
+                {forwardlinks.map((link) => link.noteId ? <button key={link.title} type="button" onClick={() => navigate(`/editor/${encodeURIComponent(link.noteId!)}`)} className="editor-assistant-panel__forwardlink">{link.title}</button> : <span key={link.title} title="目标笔记不存在" className="editor-assistant-panel__missing-link">{link.title}（未创建）</span>)}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  ), [allConcepts, backlinks, concepts, forwardlinks, isEditMode, navigate, triggerSave])
+
+  const outlinePanel = useMemo(() => !isEditMode ? (
+    <Outline content={content} onJump={handleJumpHeading} />
+  ) : (
+    <p className="editor-assistant-panel__empty">切换到预览以查看当前笔记目录。</p>
+  ), [content, handleJumpHeading, isEditMode])
   if (showTypeDialog) {
     return (
       <div
@@ -583,7 +664,7 @@ export default function EditorPage() {
       )}
 
       <div className={`editor-workspace__body${isAssistantPanelOpen && !isSidePanel && !isFocusMode ? ' editor-workspace__body--panel-open' : ''}`}>
-      <div className="editor-workspace__column">
+      <div className="editor-workspace__column" data-editor-main>
       {isEditMode ? (
         <input
           type="text"
@@ -736,13 +817,9 @@ export default function EditorPage() {
           ) : <span style={{ fontSize: '13px', color: 'var(--faint)' }}>无标签</span>
         )}
       </div>
-
       </div>
       {isEditMode ? (
         <>
-          <div className={`editor-workspace__low-priority${isFocusMode ? ' editor-workspace__low-priority--hidden' : ''}`} data-editor-auxiliary aria-hidden={isFocusMode}>
-          {aiAuxiliaryPanels}
-          </div>
           <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>正在加载编辑器...</div>}>
           <CodeMirrorEditor
             value={content}
@@ -769,61 +846,31 @@ export default function EditorPage() {
         )
       )}
 
-      <div className={`editor-workspace__low-priority${isFocusMode ? ' editor-workspace__low-priority--hidden' : ''}`} data-editor-auxiliary aria-hidden={isFocusMode}>
-      <div style={{ marginTop: '24px', paddingBottom: '40px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--faint)', marginBottom: '6px' }}>关联概念</div>
-        {isEditMode ? (
-          <>
-            <WeakLinkEditor concepts={concepts} suggestions={allConcepts} onChange={(newConcepts) => { setConcepts(newConcepts); triggerSave({ relatedConcepts: newConcepts }) }} />
-            <div style={{ fontSize: '12px', color: 'var(--faint)', marginTop: '8px' }}>
-              提示: 在内容中输入 <code style={{ background: 'var(--surface-2)', padding: '1px 4px', borderRadius: '3px' }}>{'[[笔记标题]]'}</code> 可以链接到其他笔记
-            </div>
-          </>
-        ) : (
-          concepts.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {concepts.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => navigate(`/?concept=${encodeURIComponent(c)}`)}
-                  title={`查看关联「${c}」的项目片段`}
-                  style={{ fontSize: '13px', padding: '3px 10px', background: 'rgba(125,207,255,0.12)', color: 'var(--cyan)', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  → {c}
-                </button>
-              ))}
-            </div>
-          ) : <span style={{ fontSize: '13px', color: 'var(--faint)' }}>无关联概念</span>
-        )}
-      </div>
-      {!isEditMode && (backlinks.length > 0 || forwardlinks.length > 0) && (
-        <section style={{ marginTop: '24px', paddingBottom: '40px', display: 'grid', gap: '12px' }}>
-          {backlinks.length > 0 && (
-            <div>
-              <div style={{ marginBottom: '6px', color: 'var(--faint)', fontSize: '12px', fontWeight: 600 }}>🔗 反向链接 ({backlinks.length})</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {backlinks.map((note) => <button key={note.id} onClick={() => navigate(`/editor/${encodeURIComponent(note.id)}`)} style={{ padding: '3px 10px', borderRadius: '4px', color: 'var(--cyan)', background: 'rgba(125,207,255,0.12)', fontSize: '13px' }}>{note.title}</button>)}
-              </div>
-            </div>
-          )}
-          {forwardlinks.length > 0 && (
-            <div>
-              <div style={{ marginBottom: '6px', color: 'var(--faint)', fontSize: '12px', fontWeight: 600 }}>↗ 正向链接 ({forwardlinks.length})</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {forwardlinks.map((link) => link.noteId ? <button key={link.title} onClick={() => navigate(`/editor/${encodeURIComponent(link.noteId!)}`)} style={{ padding: '3px 10px', borderRadius: '4px', color: 'var(--green)', background: 'rgba(158,206,106,0.12)', fontSize: '13px' }}>{link.title}</button> : <span key={link.title} title="目标笔记不存在" style={{ padding: '3px 10px', borderRadius: '4px', color: 'var(--faint)', background: 'var(--surface-2)', fontSize: '13px' }}>{link.title}（未创建）</span>)}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-      {!isEditMode && <Outline content={content} onJump={handleJumpHeading} />}
-      </div>
       </div>
       <EditorSidePanel
         isOpen={isAssistantPanelOpen && !isSidePanel}
         isFocusHidden={isFocusMode}
+        activeTab={assistantTab}
+        tabs={EDITOR_ASSISTANT_TABS}
+        onTabChange={setAssistantTab}
         onClose={() => setAssistantPanelOpen(false)}
-      />
+      >
+        <section id="editor-assistant-panel-overview" role="tabpanel" aria-labelledby="editor-assistant-tab-overview" data-editor-assistant-tab-panel="overview" hidden={assistantTab !== 'overview'}>
+          {overviewPanel}
+        </section>
+        <section id="editor-assistant-panel-history" role="tabpanel" aria-labelledby="editor-assistant-tab-history" data-editor-assistant-tab-panel="history" hidden={assistantTab !== 'history'}>
+          {historyPanel}
+        </section>
+        <section id="editor-assistant-panel-outline" role="tabpanel" aria-labelledby="editor-assistant-tab-outline" data-editor-assistant-tab-panel="outline" hidden={assistantTab !== 'outline'}>
+          {outlinePanel}
+        </section>
+        <section id="editor-assistant-panel-links" role="tabpanel" aria-labelledby="editor-assistant-tab-links" data-editor-assistant-tab-panel="links" hidden={assistantTab !== 'links'}>
+          {linksPanel}
+        </section>
+        <section id="editor-assistant-panel-ai" role="tabpanel" aria-labelledby="editor-assistant-tab-ai" data-editor-assistant-tab-panel="ai" hidden={assistantTab !== 'ai'}>
+          {aiPanel}
+        </section>
+      </EditorSidePanel>
       </div>
     </div>
   )

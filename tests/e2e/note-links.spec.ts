@@ -107,25 +107,34 @@ async function initializeAndSeed(page: Page) {
   await writeNotes(page, false)
 }
 
+async function openLinksPanel(page: Page) {
+  const assistantPanel = page.locator('[data-editor-assistant-panel]')
+  if (await assistantPanel.count() === 0) await page.getByRole('button', { name: '打开辅助面板' }).click()
+  await assistantPanel.getByRole('tab', { name: '链接' }).click()
+  return assistantPanel.locator('[data-editor-assistant-tab-panel="links"]')
+}
 test('resolves production wiki forward and backlinks, then refreshes a newly created target', async ({ page }) => {
   await initializeAndSeed(page)
 
   await page.goto(`/editor/${sourceNoteId}`)
   await expect(page.getByRole('heading', { name: sourceTitle })).toBeVisible()
-  const forwardSection = page.getByText(/正向链接/).locator('..')
+  const linksPanel = await openLinksPanel(page)
+  const forwardSection = linksPanel.getByText(/正向链接/).locator('..')
   await expect(forwardSection.getByRole('button', { name: targetTitle, exact: true })).toBeVisible()
   await expect(forwardSection.getByText(`${lateTargetTitle}（未创建）`, { exact: true })).toBeVisible()
 
   await forwardSection.getByRole('button', { name: targetTitle, exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/editor/${targetNoteId}$`))
   await expect(page.getByRole('heading', { name: targetTitle })).toBeVisible()
-  const backlinkSection = page.getByText(/反向链接/).locator('..')
+  const targetLinksPanel = await openLinksPanel(page)
+  const backlinkSection = targetLinksPanel.getByText(/反向链接/).locator('..')
   await expect(backlinkSection.getByRole('button', { name: sourceTitle, exact: true })).toBeVisible()
 
   await writeNotes(page, true)
   await page.goto(`/editor/${sourceNoteId}`)
   await expect(page.getByRole('heading', { name: sourceTitle })).toBeVisible()
-  const refreshedForwardSection = page.getByText(/正向链接/).locator('..')
+  const refreshedLinksPanel = await openLinksPanel(page)
+  const refreshedForwardSection = refreshedLinksPanel.getByText(/正向链接/).locator('..')
   await expect(refreshedForwardSection.getByRole('button', { name: lateTargetTitle, exact: true })).toBeVisible()
   await refreshedForwardSection.getByRole('button', { name: lateTargetTitle, exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/editor/${lateTargetNoteId}$`))

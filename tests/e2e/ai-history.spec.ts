@@ -125,8 +125,10 @@ test('shows persisted AI history in the production editor without hiding valid r
   await expect(page.getByRole('heading', { name: 'E2E AI 历史笔记' })).toBeVisible()
 
   await page.getByRole('button', { name: /编辑/ }).click()
+  await page.getByRole('button', { name: '打开辅助面板' }).click()
+  await page.getByRole('tab', { name: '历史' }).click()
 
-  const panel = page.locator('section[aria-label="AI 历史"]')
+  const panel = page.locator('[data-editor-assistant-panel] section[aria-label="AI 历史"]')
   await expect(panel).toBeVisible()
   await expect(panel.getByText('笔记整理', { exact: true })).toBeVisible()
   await expect(panel.getByText('元数据提取', { exact: true })).toBeVisible()

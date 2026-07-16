@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Note } from '../types'
 
 const mocks = vi.hoisted(() => ({
@@ -70,7 +70,7 @@ let root: Root | null = null
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 function click(label: string) {
-  const button = [...(container?.querySelectorAll('button') ?? [])].find((item) => item.textContent === label)
+  const button = [...(container?.querySelectorAll('button') ?? [])].find((item) => item.textContent === label || item.getAttribute('aria-label') === label)
   if (!button) throw new Error(`未找到按钮：${label}`)
   button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 }
@@ -83,6 +83,10 @@ async function renderPage() {
     root?.render(<MemoryRouter initialEntries={['/editor/note_1']}><Routes><Route path="/editor/:noteId" element={<EditorPage />} /></Routes></MemoryRouter>)
   })
 }
+
+beforeEach(() => {
+  localStorage.clear()
+})
 
 afterEach(async () => {
   if (root) await act(async () => { root?.unmount() })
@@ -102,7 +106,8 @@ describe('EditorPage draft render boundary', () => {
     vi.useFakeTimers()
     mocks.notesToArray.mockResolvedValue([note, targetNote])
     await renderPage()
-    await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); click('打开辅助面板') })
+    await act(async () => { click('切换到辅助标签 链接') })
 
     expect(mocks.notesToArray).not.toHaveBeenCalled()
     expect(container?.textContent).toContain('目标笔记')
@@ -116,14 +121,16 @@ describe('EditorPage draft render boundary', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(249) })
     expect(container?.textContent).not.toContain('目标 C')
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(1); click('👁 预览') })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); click('👁 预览'); click('打开辅助面板') })
+    await act(async () => { click('切换到辅助标签 链接') })
     expect(container?.textContent).toContain('目标 C')
     expect(container?.textContent).not.toContain('目标 A')
     expect(container?.textContent).not.toContain('目标 B')
   })
   it('keeps read-only auxiliary panels stable while the CodeMirror draft changes and AI reads the latest draft', async () => {
     await renderPage()
-    await act(async () => { click('✏️ 编辑') })
+    await act(async () => { click('✏️ 编辑'); click('打开辅助面板') })
+    await act(async () => { click('切换到辅助标签 AI整理') })
     const initialHistoryRenders = mocks.historyRenders
     const initialOverviewRenders = mocks.overviewRenders
 
@@ -138,15 +145,13 @@ describe('EditorPage draft render boundary', () => {
 
   it('keeps read-only auxiliary panels stable while the assistant container opens and closes', async () => {
     await renderPage()
-    await act(async () => { click('✏️ 编辑') })
-    const initialHistoryRenders = mocks.historyRenders
-    const initialOverviewRenders = mocks.overviewRenders
-
-    await act(async () => { click('辅助面板') })
+    await act(async () => { click('✏️ 编辑'); click('打开辅助面板') })
+    const openedHistoryRenders = mocks.historyRenders
+    const openedOverviewRenders = mocks.overviewRenders
     await act(async () => { click('关闭') })
 
-    expect(mocks.historyRenders).toBe(initialHistoryRenders)
-    expect(mocks.overviewRenders).toBe(initialOverviewRenders)
+    expect(mocks.historyRenders).toBe(openedHistoryRenders)
+    expect(mocks.overviewRenders).toBe(openedOverviewRenders)
   })
   it('renders the latest unsaved draft immediately in preview and keeps a 250 KiB edit outside auxiliary render work', async () => {
     mocks.renderMarkdownPreview.mockResolvedValue('<h1>草稿 B</h1>')

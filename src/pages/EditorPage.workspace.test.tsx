@@ -171,8 +171,8 @@ describe('EditorPage workspace controls and local save state', () => {
 
     await act(async () => { button('打开辅助面板') })
     expect(container?.querySelector('[data-editor-assistant-panel]')).not.toBeNull()
-    expect(container?.textContent).toContain('概览')
-    expect(container?.textContent).toContain('暂无辅助内容')
+    expect(container?.querySelector('[data-editor-assistant-tab-panel="overview"]')?.hasAttribute('hidden')).toBe(false)
+    expect(container?.textContent).toContain('知识结构')
     expect(localStorage.getItem('learning-knowledge-base.editor-assistant-panel.v1')).toBe('open')
     expect(mocks.editorMounts).toBe(initialMounts)
 
@@ -193,14 +193,39 @@ describe('EditorPage workspace controls and local save state', () => {
     await renderPage()
     expect(container?.querySelector('[data-editor-assistant-panel]')).not.toBeNull()
   })
+  it('moves existing assistants into selected side-panel tabs without remounting CodeMirror', async () => {
+    await renderPage()
+    await act(async () => { button('开始编辑') })
+    const initialMounts = mocks.editorMounts
+    await act(async () => { button('打开辅助面板') })
+
+    const main = container?.querySelector('[data-editor-main]')
+    const panel = container?.querySelector('[data-editor-assistant-panel]')
+    expect(main).not.toBeNull()
+    expect(panel?.querySelector('[data-editor-assistant-tab-panel="overview"]')?.hasAttribute('hidden')).toBe(false)
+    expect(main?.textContent).not.toContain('知识结构')
+
+    await act(async () => { button('切换到辅助标签 历史') })
+    expect(panel?.querySelector('[data-editor-assistant-tab-panel="history"]')?.hasAttribute('hidden')).toBe(false)
+    expect(panel?.querySelector('[data-editor-assistant-tab-panel="overview"]')?.hasAttribute('hidden')).toBe(true)
+    expect(main?.textContent).not.toContain('AI 历史')
+
+    await act(async () => { button('切换到辅助标签 AI整理') })
+    expect(panel?.querySelector('[data-editor-assistant-tab-panel="ai"]')?.hasAttribute('hidden')).toBe(false)
+    expect(panel?.textContent).toContain('AI 整理')
+    expect(panel?.textContent).toContain('AI 知识分析')
+    expect(mocks.editorMounts).toBe(initialMounts)
+  })
   it('keeps an open assistant panel hidden during focus mode and restores it afterwards', async () => {
     await renderPage()
     await act(async () => { button('打开辅助面板') })
+    await act(async () => { button('切换到辅助标签 历史') })
     await act(async () => { button('进入专注模式') })
     expect(container?.querySelector('[data-editor-assistant-panel]')?.classList.contains('editor-assistant-panel--focus-hidden')).toBe(true)
 
     await act(async () => { button('退出专注模式') })
     expect(container?.querySelector('[data-editor-assistant-panel]')?.classList.contains('editor-assistant-panel--focus-hidden')).toBe(false)
+    expect(container?.querySelector('[data-editor-assistant-tab-panel="history"]')?.hasAttribute('hidden')).toBe(false)
   })
 
   it('does not add a save when the assistant panel opens and closes around a pending draft', async () => {
@@ -209,6 +234,8 @@ describe('EditorPage workspace controls and local save state', () => {
     await act(async () => { button('开始编辑') })
     await act(async () => { button('输入第一版草稿') })
     await act(async () => { button('打开辅助面板') })
+    await act(async () => { button('切换到辅助标签 链接') })
+    await act(async () => { button('切换到辅助标签 AI整理') })
     await act(async () => { button('关闭辅助面板') })
     await act(async () => { await vi.advanceTimersByTimeAsync(800) })
     expect(mocks.updateNote).toHaveBeenCalledTimes(1)

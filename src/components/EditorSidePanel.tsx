@@ -1,10 +1,31 @@
+import type { ReactNode } from 'react'
+
+export type EditorAssistantTab = 'overview' | 'history' | 'outline' | 'links' | 'ai'
+
+export interface EditorAssistantTabDefinition {
+  id: EditorAssistantTab
+  label: string
+}
+
 interface EditorSidePanelProps {
   isOpen: boolean
   isFocusHidden: boolean
+  activeTab: EditorAssistantTab
+  tabs: readonly EditorAssistantTabDefinition[]
+  onTabChange: (tab: EditorAssistantTab) => void
   onClose: () => void
+  children: ReactNode
 }
 
-export default function EditorSidePanel({ isOpen, isFocusHidden, onClose }: EditorSidePanelProps) {
+export default function EditorSidePanel({
+  isOpen,
+  isFocusHidden,
+  activeTab,
+  tabs,
+  onTabChange,
+  onClose,
+  children,
+}: EditorSidePanelProps) {
   if (!isOpen) return null
 
   return (
@@ -24,12 +45,27 @@ export default function EditorSidePanel({ isOpen, isFocusHidden, onClose }: Edit
         </button>
       </header>
       <div className="editor-assistant-panel__tabs" role="tablist" aria-label="辅助面板内容">
-        <span className="editor-assistant-panel__tab" role="tab" aria-selected="true">概览</span>
+        {tabs.map((tab) => {
+          const isSelected = tab.id === activeTab
+          return (
+            <button
+              key={tab.id}
+              id={`editor-assistant-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              className={`editor-assistant-panel__tab${isSelected ? ' editor-assistant-panel__tab--active' : ''}`}
+              aria-label={`切换到辅助标签 ${tab.label}`}
+              aria-selected={isSelected}
+              aria-controls={`editor-assistant-panel-${tab.id}`}
+              tabIndex={0}
+              onClick={() => onTabChange(tab.id)}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
-      <div className="editor-assistant-panel__content">
-        <p>暂无辅助内容</p>
-        <span>后续可在此放置已有的编辑辅助功能。</span>
-      </div>
+      <div className="editor-assistant-panel__content">{children}</div>
     </aside>
   )
 }

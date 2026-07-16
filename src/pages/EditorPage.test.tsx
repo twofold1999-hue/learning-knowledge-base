@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Note } from '../types'
 
 const mocks = vi.hoisted(() => ({
@@ -60,7 +60,7 @@ let root: Root | null = null
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 function click(label: string) {
-  const button = [...(container?.querySelectorAll('button') ?? [])].find((item) => item.textContent === label)
+  const button = [...(container?.querySelectorAll('button') ?? [])].find((item) => item.textContent === label || item.getAttribute('aria-label') === label)
   if (!button) throw new Error(`未找到按钮：${label}`)
   button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 }
@@ -73,6 +73,10 @@ async function renderPage() {
     root?.render(<MemoryRouter initialEntries={['/editor/note_1']}><Routes><Route path="/editor/:noteId" element={<EditorPage />} /></Routes></MemoryRouter>)
   })
 }
+
+beforeEach(() => {
+  localStorage.clear()
+})
 
 afterEach(async () => {
   if (root) await act(async () => { root?.unmount() })
@@ -91,6 +95,8 @@ describe('EditorPage AI application save barrier', () => {
 
     await act(async () => { click('✏️ 编辑'); await Promise.resolve() })
     await act(async () => { click('输入新正文'); await Promise.resolve() })
+    await act(async () => { click('打开辅助面板') })
+    await act(async () => { click('切换到辅助标签 AI整理') })
     await act(async () => { click('整理当前笔记'); await Promise.resolve() })
     await act(async () => { click('应用整理结果'); await Promise.resolve() })
 
@@ -108,6 +114,8 @@ describe('EditorPage AI application save barrier', () => {
 
     await act(async () => { click('✏️ 编辑'); await Promise.resolve() })
     await act(async () => { click('输入新正文'); click('立即保存'); await Promise.resolve() })
+    await act(async () => { click('打开辅助面板') })
+    await act(async () => { click('切换到辅助标签 AI整理') })
     await act(async () => { click('整理当前笔记'); await Promise.resolve() })
     await act(async () => { click('应用整理结果'); await Promise.resolve() })
 
