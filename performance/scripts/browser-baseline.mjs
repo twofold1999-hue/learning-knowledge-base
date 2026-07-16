@@ -219,16 +219,45 @@ async function measureGraph(browser, entityCount, rounds = 3) {
     await seedRecords(page, { knowledgeEntities: graph.entities, knowledgeRelations: graph.relations })
     const startedAt = now()
     await page.goto(resolveLocalUrl('/graph'))
+    await page.evaluate(() => {
+      window.__performanceGraphPhases = []
+      const startedAt = performance.now()
+      const record = () => {
+        const phase = document.querySelector('section[aria-label="实体图谱"]')?.getAttribute('data-graph-preparation-phase')
+        if (!phase) return
+        const previous = window.__performanceGraphPhases.at(-1)
+        if (!previous || previous.phase !== phase) window.__performanceGraphPhases.push({ phase, atMs: performance.now() - startedAt })
+      }
+      window.__performanceGraphObserver?.disconnect()
+      window.__performanceGraphObserver = new MutationObserver(record)
+      window.__performanceGraphObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-graph-preparation-phase'] })
+      record()
+    })
     await page.getByRole('button', { name: '实体图谱', exact: true }).click()
-    await page.locator('section[aria-label="实体图谱"] .react-flow__node').first().waitFor({ state: 'visible', timeout: 20_000 })
-    const nodes = await page.locator('section[aria-label="实体图谱"] .react-flow__node').count()
-    runs.push({ firstVisibleMs: rounded(now() - startedAt), renderedNodeCount: nodes, ...await domSnapshot(page), pageErrors: errors })
+    const entityGraph = page.locator('section[aria-label="实体图谱"]')
+    await entityGraph.locator('.react-flow__node').first().waitFor({ state: 'visible', timeout: 20_000 })
+    await page.waitForFunction(() => document.querySelector('section[aria-label="实体图谱"]')?.getAttribute('data-graph-preparation-phase') === 'ready')
+    const nodes = await entityGraph.locator('.react-flow__node').count()
+    const phaseTransitions = await page.evaluate(() => window.__performanceGraphPhases)
+    const miniMapDomNodes = await entityGraph.locator('.react-flow__minimap *').count()
+    const controlsDomNodes = await entityGraph.locator('.react-flow__controls *').count()
+    const backgroundDomNodes = await entityGraph.locator('.react-flow__background *').count()
+    runs.push({
+      firstVisibleMs: rounded(now() - startedAt),
+      readyMs: rounded(phaseTransitions.find((entry) => entry.phase === 'ready')?.atMs ?? 0),
+      phaseTransitions,
+      renderedNodeCount: nodes,
+      miniMapDomNodes,
+      controlsDomNodes,
+      backgroundDomNodes,
+      ...await domSnapshot(page),
+      pageErrors: errors,
+    })
     assertNoExternalRequests(externalRequests)
     await context.close()
   }
   return summarizeRuns(runs)
 }
-
 async function measureLifecycle(browser) {
   const context = await browser.newContext()
   const { page, errors, externalRequests } = await openApp(context)
@@ -251,6 +280,24 @@ async function measureLifecycle(browser) {
   return { rounds, domNodeDelta: rounds.at(-1).domNodes - rounds[0].domNodes, listenerCount: null, pageErrors: errors }
 }
 
+async function measureGraphLifecycle(browser) {
+  const context = await browser.newContext()
+  const { page, errors, externalRequests } = await openApp(context)
+  const graph = makeGraphRecords(50)
+  await seedRecords(page, { knowledgeEntities: graph.entities, knowledgeRelations: graph.relations })
+  const rounds = []
+  for (let round = 1; round <= 10; round += 1) {
+    await page.goto(resolveLocalUrl('/graph'))
+    await page.getByRole('button', { name: '实体图谱', exact: true }).click()
+    await page.waitForFunction(() => document.querySelector('section[aria-label="实体图谱"]')?.getAttribute('data-graph-preparation-phase') === 'ready')
+    await page.goto(resolveLocalUrl('/'))
+    await page.getByRole('heading').first().waitFor({ state: 'visible' })
+    rounds.push({ round, ...await domSnapshot(page), pageErrorCount: errors.length })
+  }
+  assertNoExternalRequests(externalRequests)
+  await context.close()
+  return { rounds, domNodeDelta: rounds.at(-1).domNodes - rounds[0].domNodes, listenerCount: null, pageErrors: errors }
+}
 async function measureBackup(browser) {
   const scenarios = []
   for (const [name, noteCount, contentBytes] of [['ordinary', 100, 1024], ['larger', 500, 5 * 1024]]) {
@@ -272,7 +319,7 @@ async function sequence(values, mapper) {
 }
 
 function summarizeRuns(runs) {
-  const keys = Object.keys(runs[0] ?? {}).filter((key) => key.endsWith('Ms') || key === 'domNodes' || key === 'jsHeapBytes' || key === 'renderedNodeCount' || key === 'longTaskCount')
+  const keys = Object.keys(runs[0] ?? {}).filter((key) => key.endsWith('Ms') || key.endsWith('DomNodes') || key === 'domNodes' || key === 'jsHeapBytes' || key === 'renderedNodeCount' || key === 'longTaskCount')
   const medianValues = Object.fromEntries(keys.map((key) => [key, median(runs.map((run) => run[key]).filter((value) => typeof value === 'number'))]))
   return { rounds: runs.length, median: medianValues, samples: runs }
 }
@@ -289,6 +336,7 @@ export async function runBrowserBaseline() {
       heatmap: Object.fromEntries(await Promise.all([100, 500, 2000].map(async (count) => [String(count), await measureHeatmap(browser, count)]))),
       graph: Object.fromEntries(await Promise.all([50, 300].map(async (count) => [String(count), await measureGraph(browser, count)]))),
       lifecycle: await measureLifecycle(browser),
+      graphLifecycle: await measureGraphLifecycle(browser),
       backup: await measureBackup(browser),
       limitations: {
         listenerCount: 'unavailable: browsers do not expose a safe general listener count API',

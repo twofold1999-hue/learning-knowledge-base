@@ -14,15 +14,16 @@ import type {
   EntityGraphSnapshot,
 } from './entityGraphTypes'
 
-const flowSpy = vi.hoisted(() => ({ render: vi.fn() }))
+const flowSpy = vi.hoisted(() => ({ render: vi.fn(), fitView: vi.fn() }))
 
 vi.mock('reactflow', async () => {
   const React = await import('react')
   const Empty = () => null
 
   return {
-    default: (props: { nodes: unknown[]; edges: unknown[]; onNodeClick?: (event: unknown, node: { id: string }) => void }) => {
+    default: (props: { nodes: unknown[]; edges: unknown[]; onNodeClick?: (event: unknown, node: { id: string }) => void; onInit?: (instance: { fitView: () => void }) => void }) => {
       flowSpy.render(props)
+      React.useEffect(() => { props.onInit?.({ fitView: flowSpy.fitView }) }, [props.onInit])
       return React.createElement('div', { 'data-testid': 'react-flow' })
     },
     Background: Empty,
@@ -132,6 +133,15 @@ let root: Root | null = null
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+async function flushGraphWork(frameCount = 4) {
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      await Promise.resolve()
+    })
+  }
+}
+
 async function renderView(props: Parameters<typeof EntityGraphView>[0]) {
   container = document.createElement('div')
   document.body.append(container)
@@ -140,9 +150,8 @@ async function renderView(props: Parameters<typeof EntityGraphView>[0]) {
   await act(async () => {
     root?.render(<MemoryRouter><EntityGraphView {...props} /></MemoryRouter>)
     await Promise.resolve()
-    await Promise.resolve()
-    await new Promise((resolve) => window.setTimeout(resolve, 0))
   })
+  await flushGraphWork()
 }
 
 function lastFlowProps(): {
@@ -196,6 +205,7 @@ describe('EntityGraphView', () => {
       }
       await Promise.resolve()
     })
+    await flushGraphWork()
     expect(dependencies.builder.mock.calls[dependencies.builder.mock.calls.length - 1]?.[0]?.filters.query).toBe('cpu')
 
     await act(async () => {
@@ -204,6 +214,7 @@ describe('EntityGraphView', () => {
       }
       await Promise.resolve()
     })
+    await flushGraphWork()
     expect(dependencies.builder.mock.calls[dependencies.builder.mock.calls.length - 1]?.[0]?.filters.entityType).toBe('tool')
 
     await act(async () => {
@@ -212,6 +223,7 @@ describe('EntityGraphView', () => {
       }
       await Promise.resolve()
     })
+    await flushGraphWork()
     expect(dependencies.builder.mock.calls[dependencies.builder.mock.calls.length - 1]?.[0]?.filters.relationType).toBe('depends_on')
   })
 
@@ -227,7 +239,7 @@ describe('EntityGraphView', () => {
 
     const props = lastFlowProps()
     expect(props.nodes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'entity_cpu', data: { label: 'CPU' } }),
+      expect.objectContaining({ id: 'entity_cpu', data: expect.objectContaining({ label: 'CPU' }) }),
     ]))
     expect(props.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'relation_directed', markerEnd: { type: 'arrowclosed' } }),
@@ -266,7 +278,7 @@ describe('EntityGraphView', () => {
 
     await renderView({ ...dependencies, service })
 
-    expect(container?.textContent).toContain('加载实体图谱...')
+    expect(container?.textContent).toContain('正在读取知识数据')
     resolveSnapshot?.(snapshot())
   })
 
@@ -275,7 +287,7 @@ describe('EntityGraphView', () => {
 
     await renderView(dependencies)
 
-    expect(container?.textContent).toContain('暂无可展示实体')
+    expect(container?.textContent).toContain('当前没有可展示知识关系')
   })
 
   it('shows a safe error state when the service fails', async () => {
@@ -285,5 +297,84 @@ describe('EntityGraphView', () => {
 
     expect(container?.textContent).toContain('实体图谱加载失败')
     expect(dependencies.builder).not.toHaveBeenCalled()
+  })
+  it('keeps stable data and graph options to one build, layout, and fitView call across an ordinary render', async () => {
+    const dependencies = createDependencies()
+
+    await renderView(dependencies)
+    expect(dependencies.builder).toHaveBeenCalledTimes(1)
+    expect(dependencies.layoutCall).toHaveBeenCalledTimes(1)
+    expect(flowSpy.fitView).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      root?.render(<MemoryRouter><EntityGraphView {...dependencies} /></MemoryRouter>)
+    })
+    await flushGraphWork()
+
+    expect(dependencies.builder).toHaveBeenCalledTimes(1)
+    expect(dependencies.layoutCall).toHaveBeenCalledTimes(1)
+    expect(flowSpy.fitView).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the layout phase before a pending layout becomes ready', async () => {
+    let resolveLayout: ((value: EntityGraphLayoutResult) => void) | undefined
+    const dependencies = createDependencies()
+    dependencies.layoutAdapter.layout = vi.fn(() => new Promise<EntityGraphLayoutResult>((resolve) => { resolveLayout = resolve }))
+
+    await renderView(dependencies)
+
+    expect(container?.textContent).toContain('正在计算图谱布局')
+    expect(container?.querySelector('section[aria-label="实体图谱"]')?.getAttribute('data-graph-preparation-phase')).toBe('laying-out')
+
+    resolveLayout?.(layout())
+    await flushGraphWork()
+
+    expect(container?.querySelector('section[aria-label="实体图谱"]')?.getAttribute('data-graph-preparation-phase')).toBe('ready')
+  })
+
+  it('ignores a stale layout completion after filters start a newer graph generation', async () => {
+    let resolveFirstLayout: ((value: EntityGraphLayoutResult) => void) | undefined
+    const builder = vi.fn((input: EntityGraphBuildInput) => graph([businessNode(input.filters.query || 'first')]))
+    const layoutAdapter: EntityGraphLayoutAdapter = {
+      layout: vi.fn((input) => {
+        if (input.nodes[0]?.id === 'first') {
+          return new Promise<EntityGraphLayoutResult>((resolve) => { resolveFirstLayout = resolve })
+        }
+        return Promise.resolve(layout(input.nodes))
+      }),
+    }
+    const dependencies = createDependencies()
+
+    await renderView({ ...dependencies, builder, layoutAdapter })
+    const search = container?.querySelector<HTMLInputElement>('input[aria-label="搜索实体"]')
+    await act(async () => {
+      if (search) setNativeValue(search, 'second')
+    })
+    await flushGraphWork()
+    resolveFirstLayout?.(layout([businessNode('first')]))
+    await flushGraphWork()
+
+    expect(lastFlowProps().nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'second' }),
+    ]))
+    expect(lastFlowProps().nodes).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'first' }),
+    ]))
+  })
+
+  it('does not start a graph preparation after an unresolved snapshot is unmounted', async () => {
+    let resolveSnapshot: ((value: EntityGraphSnapshot) => void) | undefined
+    const service: EntityGraphService = {
+      readApprovedSnapshot: vi.fn(() => new Promise<EntityGraphSnapshot>((resolve) => { resolveSnapshot = resolve })),
+    }
+    const dependencies = createDependencies()
+
+    await renderView({ ...dependencies, service })
+    await act(async () => { root?.unmount() })
+    resolveSnapshot?.(snapshot())
+    await flushGraphWork()
+
+    expect(dependencies.builder).not.toHaveBeenCalled()
+    expect(dependencies.layoutCall).not.toHaveBeenCalled()
   })
 })

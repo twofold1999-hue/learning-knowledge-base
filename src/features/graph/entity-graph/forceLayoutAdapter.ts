@@ -67,16 +67,20 @@ export const forceLayoutAdapter: EntityGraphLayoutAdapter = {
       .force('collide', forceCollide(48))
 
     simulation.stop()
-    for (let iteration = 0; iteration < FORCE_LAYOUT_ITERATIONS; iteration += 1) {
-      simulation.tick()
-    }
+    try {
+      for (let iteration = 0; iteration < FORCE_LAYOUT_ITERATIONS; iteration += 1) {
+        simulation.tick()
+      }
 
-    return {
-      nodes: input.nodes.map((node, index) => ({
-        ...node,
-        position: assertFinitePosition(simulationNodes[index]!),
-      })),
-      edges: input.edges.map((edge) => ({ ...edge })),
+      return {
+        nodes: input.nodes.map((node, index) => ({
+          ...node,
+          position: assertFinitePosition(simulationNodes[index]!),
+        })),
+        edges: input.edges.map((edge) => ({ ...edge })),
+      }
+    } finally {
+      simulation.stop()
     }
   },
 }

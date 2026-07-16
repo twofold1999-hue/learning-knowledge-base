@@ -17,7 +17,7 @@ node performance/scripts/run-baseline.mjs --output performance/baseline/YYYY-MM-
 - Bundle：递归读取 `dist`，记录原始字节、gzip 字节、JS/CSS 清单和最大产物。
 - 编辑器：5/50/250 KiB 正文各三轮，记录首次 CodeMirror 可输入、一次短输入、800ms 防抖后的实际写入完成、DOM、长任务和页面错误。
 - 热力图：100/500/2000 笔记各三轮，记录首次可见和 DOM。没有生产埋点时，聚合单独耗时标记为 unavailable，首次可见包含聚合与渲染。
-- 实体图谱：50/300 approved 实体各三轮，记录切换到实体模式后的首次节点可见和 DOM；额外进行首页→编辑→首页十轮生命周期检查。
+- 实体图谱：50/300 approved 实体各三轮，记录切换后的首次节点可见、阶段切换、ready、DOM，以及 MiniMap/Controls/Background 子树；额外进行首页→编辑→首页和图谱→首页各十轮生命周期检查。
 - Backup：使用隔离浏览器内的原生 IndexedDB 只读快照与 JSON 序列化代理，记录普通和较大样本。该代理不把 `backupService` 暴露给生产页面。
 
 浏览器没有标准、安全的通用 listener 计数 API，因此 `listenerCount` 固定为 `null`。`performance.memory` 仅在 Chromium 可用，不能据此得出 heap 泄漏结论。

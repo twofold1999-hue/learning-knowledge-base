@@ -9,6 +9,7 @@ import type {
 const forceSpies = vi.hoisted(() => ({
   forceSimulation: vi.fn(),
   tick: vi.fn(),
+  stop: vi.fn(),
 }))
 
 vi.mock('d3-force', async (importOriginal) => {
@@ -19,6 +20,11 @@ vi.mock('d3-force', async (importOriginal) => {
     forceSimulation: ((nodes?: import('d3-force').SimulationNodeDatum[]) => {
       const simulation = actual.forceSimulation(nodes)
       const originalTick = simulation.tick
+      const originalStop = simulation.stop
+      simulation.stop = () => {
+        forceSpies.stop()
+        return originalStop.call(simulation)
+      }
       simulation.tick = (iterations?: number) => {
         forceSpies.tick(iterations)
         return originalTick.call(simulation, iterations)
@@ -86,6 +92,7 @@ function graph(
 afterEach(() => {
   forceSpies.forceSimulation.mockClear()
   forceSpies.tick.mockClear()
+  forceSpies.stop.mockClear()
 })
 
 describe('forceLayoutAdapter', () => {
@@ -118,6 +125,7 @@ describe('forceLayoutAdapter', () => {
     )).toBe(true)
     expect(forceSpies.forceSimulation).toHaveBeenCalledTimes(1)
     expect(forceSpies.tick).toHaveBeenCalledTimes(180)
+    expect(forceSpies.stop).toHaveBeenCalledTimes(2)
   })
 
   it('does not mutate the input graph and returns copied nodes and edges', async () => {
