@@ -11,28 +11,36 @@ const mocks = vi.hoisted(() => ({
   renderMarkdownPreview: vi.fn(),
   historyRenders: 0,
   overviewRenders: 0,
+  notesToArray: vi.fn(),
 }))
 
 const note: Note = {
-  id: 'note_1', type: 'knowledge_fragment', title: '测试笔记', content: '# 初始正文',
+  id: 'note_1', type: 'knowledge_fragment', title: '测试笔记', content: '参见 [[目标笔记]]',
   tags: [], relatedConcepts: [], directoryId: null, projectId: null, courseId: null,
   chapterOrder: null, sourceLocation: null, mediaUrl: null, videoTimestamp: null,
   createdAt: '2026-07-15T00:00:00.000Z', updatedAt: '2026-07-15T00:00:00.000Z',
 }
 
+const targetNote: Note = { ...note, id: 'target_note', title: '目标笔记', content: '# 目标正文' }
+const rapidTargets = ['A', 'B', 'C'].map((name) => ({ ...note, id: `target_${name}`, title: `目标 ${name}`, content: '# 目标正文' }))
+
 const noteStore = {
   currentNote: note, isLoading: false, isSaving: false, saveError: null,
   fetchNote: mocks.fetchNote, createNote: vi.fn(), updateNote: mocks.updateNote,
-  synchronizePersistedNote: mocks.synchronizePersistedNote, deleteNote: vi.fn(), allNotes: [note],
+  synchronizePersistedNote: mocks.synchronizePersistedNote, deleteNote: vi.fn(), allNotes: [note, targetNote, ...rapidTargets],
 }
 
 vi.mock('../stores/noteStore', () => ({ useNoteStore: (selector: (state: typeof noteStore) => unknown) => selector(noteStore) }))
 vi.mock('../stores/directoryStore', () => ({ useDirectoryStore: (selector: (state: { directories: unknown[] }) => unknown) => selector({ directories: [] }) }))
 vi.mock('../stores/projectStore', () => ({ useProjectStore: (selector: (state: { projects: unknown[]; courses: unknown[] }) => unknown) => selector({ projects: [], courses: [] }) }))
+vi.mock('../services/db', () => ({ db: { notes: { toArray: mocks.notesToArray } } }))
 vi.mock('../components/CodeMirrorEditor', () => ({
   default: ({ onChange }: { onChange: (content: string) => void }) => <>
     <button type="button" onClick={() => onChange('# 草稿 A')}>输入正文 A</button>
     <button type="button" onClick={() => onChange('# 草稿 B')}>输入正文 B</button>
+    <button type="button" onClick={() => onChange('[[目标 A]]')}>输入 Wiki A</button>
+    <button type="button" onClick={() => onChange('[[目标 B]]')}>输入 Wiki B</button>
+    <button type="button" onClick={() => onChange('[[目标 C]]')}>输入 Wiki C</button>
     <button type="button" onClick={() => onChange(`## 长正文\n${'x'.repeat(250 * 1024)}`)}>输入长正文</button>
   </>,
 }))
@@ -51,7 +59,7 @@ vi.mock('../components/VideoPanel', () => ({ default: () => null }))
 vi.mock('../services/imageService', () => ({ getImage: vi.fn().mockResolvedValue(null) }))
 vi.mock('../services/markdownService', () => ({ renderMarkdownPreview: mocks.renderMarkdownPreview }))
 vi.mock('../services/exportService', () => ({ downloadNotesAsMarkdown: vi.fn() }))
-vi.mock('../services/linkService', () => ({ findBacklinks: vi.fn().mockResolvedValue([]), findForwardlinks: vi.fn().mockResolvedValue([]) }))
+
 vi.mock('../services/biliStudyBridge', () => ({ formatVideoTimestamp: vi.fn(), isBilibiliVideoUrl: vi.fn(), openBilibiliStudy: vi.fn() }))
 vi.mock('../utils/tagColors', () => ({ getTagColor: vi.fn() }))
 
@@ -90,6 +98,29 @@ afterEach(async () => {
 })
 
 describe('EditorPage draft render boundary', () => {
+  it('resolves preview wiki links from the allNotes index without Dexie table reads', async () => {
+    vi.useFakeTimers()
+    mocks.notesToArray.mockResolvedValue([note, targetNote])
+    await renderPage()
+    await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+
+    expect(mocks.notesToArray).not.toHaveBeenCalled()
+    expect(container?.textContent).toContain('目标笔记')
+  })
+
+  it('uses only the final rapid wiki draft after the 250ms delay', async () => {
+    vi.useFakeTimers()
+    await renderPage()
+    await act(async () => { click('✏️ 编辑') })
+    await act(async () => { click('输入 Wiki A'); click('输入 Wiki B'); click('输入 Wiki C') })
+    await act(async () => { await vi.advanceTimersByTimeAsync(249) })
+    expect(container?.textContent).not.toContain('目标 C')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); click('👁 预览') })
+    expect(container?.textContent).toContain('目标 C')
+    expect(container?.textContent).not.toContain('目标 A')
+    expect(container?.textContent).not.toContain('目标 B')
+  })
   it('keeps read-only auxiliary panels stable while the CodeMirror draft changes and AI reads the latest draft', async () => {
     await renderPage()
     await act(async () => { click('✏️ 编辑') })

@@ -8,7 +8,14 @@ import { renderMarkdownPreview } from '../services/markdownService'
 import { trackPendingSave } from '../services/saveCoordinator'
 import { createEditorSaveCoordinator } from '../services/editorSaveCoordinator'
 import { downloadNotesAsMarkdown } from '../services/exportService'
-import { findBacklinks, findForwardlinks } from '../services/linkService'
+import {
+  createNoteLinkIndex,
+  planNoteLinkQuery,
+  resolveBacklinks,
+  resolveForwardlinks,
+  type Forwardlink,
+  type NoteLinkQueryState,
+} from '../services/noteLinkIndex'
 import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
 import Outline from '../components/Outline'
@@ -19,9 +26,17 @@ import AIHistoryPanel from '../components/AIHistoryPanel'
 import KnowledgeOverviewPanel from '../components/KnowledgeOverviewPanel'
 import { formatVideoTimestamp, isBilibiliVideoUrl, openBilibiliStudy } from '../services/biliStudyBridge'
 import { getTagColor } from '../utils/tagColors'
-import type { NoteType, NoteUpdate } from '../types'
+import type { Note, NoteType, NoteUpdate } from '../types'
 
 const CodeMirrorEditor = lazy(() => import('../components/CodeMirrorEditor'))
+
+function haveSameBacklinks(current: Note[], next: Note[]): boolean {
+  return current.length === next.length && current.every((note, index) => note.id === next[index]?.id)
+}
+
+function haveSameForwardlinks(current: Forwardlink[], next: Forwardlink[]): boolean {
+  return current.length === next.length && current.every((link, index) => link.title === next[index]?.title && link.noteId === next[index]?.noteId)
+}
 
 export default function EditorPage() {
   const { noteId } = useParams()
@@ -79,6 +94,8 @@ export default function EditorPage() {
   const titleRef = useRef('')
   const linkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const linkRequestId = useRef(0)
+  const lastLinkQueryRef = useRef<NoteLinkQueryState | null>(null)
+
 
   if (!editorSaveCoordinator.current) {
     editorSaveCoordinator.current = createEditorSaveCoordinator(
@@ -88,6 +105,7 @@ export default function EditorPage() {
   const allTags = useMemo(() => Array.from(new Set(allNotes.flatMap((n) => n.tags))), [allNotes])
   const allConcepts = useMemo(() => Array.from(new Set(allNotes.flatMap((n) => n.relatedConcepts))), [allNotes])
   const titleToId = useMemo(() => new Map(allNotes.map((n) => [n.title, n.id])), [allNotes])
+  const noteLinkIndex = useMemo(() => createNoteLinkIndex(allNotes), [allNotes])
   const activeCourse = useMemo(() => courses.find((course) => course.id === courseId), [courses, courseId])
   const effectiveMediaUrl = mediaUrl || activeCourse?.videoUrl || null
 
@@ -144,14 +162,21 @@ export default function EditorPage() {
       return
     }
     linkTimerRef.current = setTimeout(() => {
-      void Promise.all([findBacklinks(nextTitle), findForwardlinks(nextContent)]).then(([nextBacklinks, nextForwardlinks]) => {
-        if (requestId === linkRequestId.current && actualNoteId.current === targetNoteId) {
-          setBacklinks(nextBacklinks)
-          setForwardlinks(nextForwardlinks)
-        }
-      })
+      if (requestId !== linkRequestId.current || actualNoteId.current !== targetNoteId) return
+
+      const plan = planNoteLinkQuery(lastLinkQueryRef.current, noteLinkIndex, targetNoteId, nextTitle, nextContent)
+
+      if (plan.shouldResolveBacklinks) {
+        const nextBacklinks = resolveBacklinks(noteLinkIndex, targetNoteId, nextTitle)
+        setBacklinks((current) => haveSameBacklinks(current, nextBacklinks) ? current : nextBacklinks)
+      }
+      if (plan.shouldResolveForwardlinks) {
+        const nextForwardlinks = resolveForwardlinks(noteLinkIndex, nextContent)
+        setForwardlinks((current) => haveSameForwardlinks(current, nextForwardlinks) ? current : nextForwardlinks)
+      }
+      lastLinkQueryRef.current = plan.nextState
     }, 250)
-  }, [])
+  }, [noteLinkIndex])
   const appendVideoAnnotation = useCallback((rawStartSeconds: number, rawEndSeconds: number, rawAnnotation: string) => {
     const startSeconds = Math.max(0, Math.floor(rawStartSeconds))
     const endSeconds = Math.max(startSeconds, Math.floor(rawEndSeconds))
@@ -255,9 +280,14 @@ export default function EditorPage() {
     if (!currentNote) {
       linkRequestId.current += 1
       if (linkTimerRef.current) clearTimeout(linkTimerRef.current)
+      lastLinkQueryRef.current = null
       setBacklinks([])
       setForwardlinks([])
       return
+    }
+    if (lastLinkQueryRef.current?.noteId !== currentNote.id) {
+      setBacklinks([])
+      setForwardlinks([])
     }
     scheduleLinkLookup(getCurrentContent(), titleRef.current)
   }, [currentNote, getCurrentContent, scheduleLinkLookup])
