@@ -8,6 +8,7 @@ import {
   getCreationFootprintLevel,
   summarizeNoteCreationFootprint,
 } from '../utils/noteCreationFootprint'
+import { NOTE_CREATION_FOOTPRINT_LEVEL_COLORS } from '../utils/noteCreationFootprintVisuals'
 
 interface HeatmapProps {
   onSelectDate?: (date: string) => void
@@ -15,13 +16,6 @@ interface HeatmapProps {
   today?: Date
 }
 
-const colors = [
-  'var(--surface)',
-  'rgba(122,162,247,0.2)',
-  'rgba(122,162,247,0.4)',
-  'rgba(122,162,247,0.7)',
-  'var(--accent)',
-]
 
 function buildMonthLabels(weeks: ReturnType<typeof buildRecentWeekCalendar>['weeks']) {
   let previousMonth = ''
@@ -91,7 +85,7 @@ export default function Heatmap({ onSelectDate, compact = false, today }: Heatma
                       aria-label={label}
                       data-date-key={day.dateKey}
                       onClick={() => onSelectDate?.(day.dateKey)}
-                      style={{ width: '100%', aspectRatio: '1 / 1', minWidth: 0, padding: 0, borderRadius: compact ? '3px' : '4px', background: colors[getCreationFootprintLevel(count)], cursor: onSelectDate ? 'pointer' : 'default' }}
+                      style={{ width: '100%', aspectRatio: '1 / 1', minWidth: 0, padding: 0, borderRadius: compact ? '3px' : '4px', background: NOTE_CREATION_FOOTPRINT_LEVEL_COLORS[getCreationFootprintLevel(count)], cursor: onSelectDate ? 'pointer' : 'default' }}
                     />
                   )
                 })}
@@ -103,7 +97,7 @@ export default function Heatmap({ onSelectDate, compact = false, today }: Heatma
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: compact ? '8px' : '12px', fontSize: '11px', color: 'var(--faint)' }}>
         <span>当天创建笔记：少</span>
-        {colors.map((color, index) => <div key={index} style={{ width: '12px', height: '12px', borderRadius: '2px', background: color }} />)}
+        {NOTE_CREATION_FOOTPRINT_LEVEL_COLORS.map((color, index) => <div key={index} style={{ width: '12px', height: '12px', borderRadius: '2px', background: color }} />)}
         <span>多（6篇及以上）</span>
       </div>
     </div>

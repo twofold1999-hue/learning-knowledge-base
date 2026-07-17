@@ -30,12 +30,12 @@ function note(id: string, createdAt: Date): Note {
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-async function renderHeatmap(onSelectDate = vi.fn()) {
+async function renderHeatmap(onSelectDate = vi.fn(), compact = false) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   await act(async () => {
-    root?.render(<Heatmap today={new Date(2024, 2, 6, 12)} onSelectDate={onSelectDate} />)
+    root?.render(<Heatmap compact={compact} today={new Date(2024, 2, 6, 12)} onSelectDate={onSelectDate} />)
   })
   return onSelectDate
 }
@@ -65,6 +65,13 @@ describe('Heatmap', () => {
     expect(container?.textContent).not.toContain('学习足迹')
   })
 
+  it('keeps the compact home-card contract at twenty natural weeks', async () => {
+    await renderHeatmap(vi.fn(), true)
+
+    expect(container?.textContent).toContain('最近 20 个自然周')
+    expect(container?.querySelector('[data-annual-footprint-grid]')).toBeNull()
+    expect(container?.querySelectorAll('button[data-date-key], [data-future-date]')).toHaveLength(140)
+  })
   it('navigates using a local date key and excludes future placeholders from tab order', async () => {
     useNoteStore.setState({ allNotes: [note('inside', new Date(2024, 2, 5, 12))] })
     const onSelectDate = await renderHeatmap()

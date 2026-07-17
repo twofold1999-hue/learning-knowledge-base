@@ -1,0 +1,65 @@
+.annual-footprint {
+  --annual-footprint-cell: 13px;
+  --annual-footprint-gap: 4px;
+  --annual-footprint-label-width: 23px;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.annual-footprint__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.annual-footprint__summary-item {
+  min-width: 0;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-2) 65%, transparent);
+}
+
+.annual-footprint__summary-item dt { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.annual-footprint__summary-item dd { margin: 4px 0 0; color: var(--ink); font-size: 25px; font-weight: 760; letter-spacing: -.04em; line-height: 1.1; }
+.annual-footprint__empty { margin: -3px 0 0; color: var(--muted); font-size: 13px; }
+
+.annual-footprint__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: 3px 0 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+.annual-footprint__canvas { width: max-content; min-width: 100%; padding: 13px 0 10px; }
+.annual-footprint__month-row, .annual-footprint__calendar-row { display: grid; grid-template-columns: var(--annual-footprint-label-width) max-content; gap: 8px; }
+.annual-footprint__month-row { margin-bottom: 7px; min-height: 18px; }
+.annual-footprint__weekday-spacer { display: block; }
+.annual-footprint__month-grid, .annual-footprint__grid { display: grid; grid-template-columns: repeat(var(--annual-footprint-week-count), var(--annual-footprint-cell)); gap: var(--annual-footprint-gap); }
+.annual-footprint__month { min-width: 0; overflow: hidden; color: var(--faint); font-size: 10px; line-height: 18px; white-space: nowrap; }
+
+.annual-footprint__weekday-labels { display: grid; grid-template-rows: repeat(7, var(--annual-footprint-cell)); gap: var(--annual-footprint-gap); color: var(--faint); font-size: 10px; line-height: var(--annual-footprint-cell); text-align: right; }
+.annual-footprint__weekday-labels span { height: var(--annual-footprint-cell); }
+.annual-footprint__grid { min-width: max-content; }
+.annual-footprint__week { display: grid; grid-template-rows: repeat(7, var(--annual-footprint-cell)); gap: var(--annual-footprint-gap); }
+
+.annual-footprint__day { display: block; width: var(--annual-footprint-cell); height: var(--annual-footprint-cell); border-radius: 3px; }
+.annual-footprint__day--padding { background: transparent; border: 1px solid color-mix(in srgb, var(--border) 34%, transparent); opacity: .42; }
+.annual-footprint__day--future { border: 1px dashed color-mix(in srgb, var(--faint) 44%, transparent); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--surface-2) 72%, transparent) 0 2px, transparent 2px 4px); opacity: .72; }
+.annual-footprint__day[data-today="true"] { outline: 2px solid var(--cyan); outline-offset: 1px; position: relative; z-index: 1; }
+
+.annual-footprint__legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--faint); font-size: 11px; }
+.annual-footprint__legend-cell { width: 12px; height: 12px; border: 1px solid color-mix(in srgb, var(--border) 48%, transparent); border-radius: 3px; }
+
+@media (max-width: 720px) {
+  .annual-footprint { --annual-footprint-cell: 12px; --annual-footprint-gap: 3px; gap: 15px; }
+  .annual-footprint__summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .annual-footprint__summary-item:last-child { grid-column: 1 / -1; }
+  .annual-footprint__summary-item { padding: 12px; }
+  .annual-footprint__summary-item dd { font-size: 22px; }
+  .annual-footprint__scroll { margin-inline: -2px; }
+}

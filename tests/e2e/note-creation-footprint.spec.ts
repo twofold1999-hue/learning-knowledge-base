@@ -27,9 +27,8 @@ async function seedLocalDateBoundaryNotes(page: Page) {
   return page.evaluate(async () => {
     const pad = (value: number) => String(value).padStart(2, '0')
     const localDateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-    const localDateLabel = (date: Date) => `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
 
-    return new Promise<{ selectedDateKey: string; selectedDateLabel: string; visibleDayCount: number }>((resolve, reject) => {
+    return new Promise<{ selectedDateKey: string; currentYear: number; yearDayCount: number }>((resolve, reject) => {
       const request = indexedDB.open('LearningKnowledgeBase')
       let settled = false
       const fail = (error: Error | DOMException | null) => {
@@ -83,13 +82,13 @@ async function seedLocalDateBoundaryNotes(page: Page) {
 
         transaction.oncomplete = () => {
           database.close()
-          const weekdayIndex = (now.getDay() + 6) % 7
           if (!settled) {
             settled = true
+            const currentYear = now.getFullYear()
             resolve({
               selectedDateKey: localDateKey(selectedDate),
-              selectedDateLabel: localDateLabel(selectedDate),
-              visibleDayCount: 26 * 7 - (6 - weekdayIndex),
+              currentYear,
+              yearDayCount: new Date(currentYear, 1, 29).getMonth() === 1 ? 366 : 365,
             })
           }
         }
@@ -106,17 +105,18 @@ async function seedLocalDateBoundaryNotes(page: Page) {
   })
 }
 
-test('shows a 26-week local note-creation footprint and filters the selected local day', async ({ page }) => {
+test('shows an annual local note-creation footprint without prematurely adding date navigation', async ({ page }) => {
   const seeded = await seedLocalDateBoundaryNotes(page)
 
   await page.goto('/heatmap')
-  await expect(page.getByRole('heading', { name: '笔记创建足迹' })).toBeVisible()
-  await expect(page.getByText('颜色表示当天创建的当前笔记数量', { exact: false })).toBeVisible()
-  await expect(page.locator('[data-date-key], [data-future-date]')).toHaveCount(26 * 7)
-  await expect(page.locator('button[data-date-key]')).toHaveCount(seeded.visibleDayCount)
-
-  await page.getByRole('button', { name: `${seeded.selectedDateLabel}：创建 1 篇笔记` }).click()
-  await expect(page).toHaveURL(new RegExp(`\\/?\\?date=${seeded.selectedDateKey}$`))
-  await expect(page.getByText('E2E 本地日期边界笔记', { exact: true })).toBeVisible()
-  await expect(page.getByText('E2E 其他本地日期笔记', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '年度笔记创建足迹' })).toBeVisible()
+  await expect(page.getByText('年度视图', { exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: '选择年份' })).toHaveValue(String(seeded.currentYear))
+  await expect(page.getByRole('region', { name: `${seeded.currentYear} 年笔记创建足迹` })).toBeVisible()
+  await expect(page.locator('[data-date-key][data-in-selected-year="true"]')).toHaveCount(seeded.yearDayCount)
+  await expect(page.locator(`[data-date-key="${seeded.selectedDateKey}"]`)).toHaveAttribute('data-count', '1')
+  await expect(page.locator('[data-annual-footprint-scroll]')).toBeVisible()
+  await expect(page.getByText('当天创建笔记：少', { exact: false })).toBeVisible()
+  await expect(page.locator('button[data-date-key]')).toHaveCount(0)
+  await expect(page).toHaveURL(/\/heatmap$/)
 })
