@@ -1,63 +1,119 @@
 # 产品体验升级生产验收（Task 20-E0）
 
-## 验收基线
+## 验收结论
 
-- 基线提交：`2cbb457ba85d16798a530db9b56d12be6bc16ca8`（`perf: reduce resident note content`）
+**最终阶段状态：ACCEPTED。**
+
+产品体验升级阶段验收通过。自动化生产测试、隔离 IndexedDB 集成测试、性能复测和真实 Microsoft Edge 手工验收均已完成。未发现阻断级数据损坏、保存失败、日期语义错误、图谱业务错误、外部请求或持续 DOM 增长。
+
+验收过程中发现的图谱顶部遮挡与 300 实体可读性问题已由独立提交修复，并在真实 Edge 中复查通过。当前满足推送本阶段全部提交的条件。
+
+## 验收基线与环境
+
+- 阶段起始基线：`2cbb457ba85d16798a530db9b56d12be6bc16ca8`（`perf: reduce resident note content`）
+- 验收完成时提交：`fd3f395`（`test: stabilize editor panel e2e`）
 - 日期：2026-07-18
-- 环境：Windows、Node `v24.15.0`、Playwright Chromium（隔离 context）
-- 构建：`npm run build` 生成的 `dist`
-- 服务器：现有生产 Node 静态服务器，`http://127.0.0.1:4174`
-- 数据库：真实 `LearningKnowledgeBase` 当前 schema；测试始终先由应用初始化，再在隔离 context 写入 fixture。
+- 自动化环境：Windows、Node `v24.15.0`、Playwright Chromium 隔离 context
+- 构建与服务器：`npm run build` 生成的 `dist`，现有生产 Node 静态服务器 `http://127.0.0.1:4174`
+- 自动化数据库边界：真实 `LearningKnowledgeBase` 当前 schema；由应用先初始化，再在隔离 context 写入 fixture。
+- 真实手工环境：独立 Microsoft Edge Profile `%TEMP%\learning-knowledge-base-e0-edge`，访问本地生产构建 `http://127.0.0.1:4174`。
 
-已验收的提交线：A2—A6（编辑器与辅助面板）、B1—B4（年度笔记创建足迹）、D1—D3（性能基线、投影治理、图谱生命周期）。
+真实 Edge 验收仅使用稳定 `e0-` fixture，未操作用户真实知识库。fixture 包含 14 篇笔记、2022/2024/2026 三个年份、5/50/250 KiB 长正文、深正文搜索数据、Wiki 前链/反链、1 门课程与 3 个章节、300 个 approved 实体、600 个 approved 关系，以及 suggested 和 rejected 关系。
 
-## 自动化验收矩阵
+已验收提交线：A2—A6（编辑器与辅助面板）、B1—B4（年度笔记创建足迹）、D1—D3（性能基线、投影治理、图谱生命周期）、E0 自动化与真实 Edge 验收。
 
-| 能力 | 原任务 | 已有测试 | E0 集成补充 | 结果 |
-| --- | --- | --- | --- | --- |
-| 长正文编辑 | A2 | 编辑器单测、`editor-draft.spec.ts` | 5/50/250 KiB 打开、250 KiB 修改、保存、切换、刷新 | PASS |
-| 保存状态与工作区 | A4 | workspace/draft 测试 | 保存后切换辅助标签不产生额外写入 | PASS |
-| 辅助面板与 AI/知识入口 | A5/A6 | side-panel、assistant-migration E2E | 五个标签与 AI 整理/知识分析入口可访问且不自动请求 | PASS |
-| 投影、正文搜索与 Wiki | D2/A3 | projection、note-links E2E | 深正文搜索→完整按需正文→正向/反向链接 | PASS |
-| 年度创建足迹 | B2/B3/B4 | 纯函数、组件与 footprint E2E | 年份切换、自然周、Tooltip、键盘、日期筛选、零篇日期 | PASS |
-| 实体图谱 | D3 | graph E2E、生命周期 E2E | 300 approved 实体、非 approved 排除、详情导航、返回再显示 | PASS |
-| 课程与创建足迹口径 | B1/D2 | 课程与投影单测 | chapterOrder、学习状态持久化、创建计数不随 updatedAt 增加 | PASS |
-| 生命周期 | D3 | graph 十轮循环 | 编辑器→面板→年度足迹→300 图谱→实体详情→首页十轮 | PASS |
-| 外部网络、错误与 schema | 既有生产 E2E 约束 | smoke 与各功能 E2E | 全部 E0 场景统一拦截外网、捕获 console/pageerror、拒绝升级 | PASS |
+## 最终验收矩阵
 
-新增 `tests/e2e/product-experience-upgrade.spec.ts` 采用六个独立场景。每个场景检查 `notes`、`deletedNotes`、`projects`、`courses`、`directories`、`images`、`aiResults`、`knowledgeEntities`、`noteEntityLinks`、`knowledgeRelations` 和 `knowledgeAuditLogs` 均已由应用初始化；`onupgradeneeded` 会立刻中止并使测试失败。
+| 范围 | 状态 | 主要证据 |
+| --- | --- | --- |
+| A2—A6 编辑器与辅助面板 | PASS | 长正文编辑、保存、预览/编辑切换、五个辅助标签与独立 Edge 复查通过。 |
+| B1—B4 年度笔记创建足迹 | PASS | 本地日期、自然周、年份切换、Tooltip、键盘和日期导航通过。 |
+| D1—D3 性能、投影与图谱生命周期 | PASS | 性能基线与复测、轻量笔记投影、300 实体图谱和十轮生命周期检查通过。 |
+| E0 自动化生产验收 | PASS | 生产构建、Node 静态服务器、真实 IndexedDB、外网拦截和完整 E2E 通过。 |
+| E0 真实 Microsoft Edge | PASS | 独立 Profile 的真实手工操作完成，未发现阻断问题。 |
+| 图谱 UI 修复与复查 | PASS | `772040b` 修复后在真实 Edge 复查通过。 |
 
-## 编辑器、投影与辅助面板
+## 自动化验收
 
-- 5 KiB 与 50 KiB 笔记均能进入 CodeMirror 编辑状态。
-- 250 KiB 笔记可定位到正文尾部、输入唯一文本、完成持久化、经过关闭面板/切换笔记/刷新后仍显示完整修改。
-- 切换概览、历史、目录、链接、AI 整理标签时，已存在的 EditorView DOM 节点仍连接；AI 整理和分析按钮存在，未发出 AI 请求。
-- 首页预览、深正文唯一词搜索和完整正文按需打开均通过；正向与反向 Wiki 链接均可从辅助面板导航。
+| 能力 | 原任务 | 自动化结果 |
+| --- | --- | --- |
+| 长正文编辑 | A2 | 5/50/250 KiB 打开、250 KiB 修改、保存、切换、刷新均通过。 |
+| 保存状态与工作区 | A4 | 保存后切换辅助标签不产生额外写入。 |
+| 辅助面板与 AI/知识入口 | A5/A6 | 五个标签与 AI 整理/知识分析入口可访问，且不自动请求。 |
+| 投影、正文搜索与 Wiki | D2/A3 | 深正文搜索、完整按需正文、正向/反向 Wiki 链接通过。 |
+| 年度创建足迹 | B2/B3/B4 | 年份切换、自然周、Tooltip、键盘、日期筛选和零篇日期通过。 |
+| 实体图谱 | D3 | 300 approved 实体、非 approved 排除、详情导航和返回再显示通过。 |
+| 课程与创建足迹口径 | B1/D2 | chapterOrder、学习状态持久化、创建计数不随 updatedAt 增加通过。 |
+| 生命周期 | D3 | 编辑器、面板、年度足迹、300 图谱、实体详情、首页十轮循环通过。 |
+| 外部网络、错误与 schema | 既有 E2E 约束 | 外网拦截、console/pageerror 捕获、拒绝 schema 升级均通过。 |
 
-## 年度创建足迹
+`tests/e2e/product-experience-upgrade.spec.ts` 使用六个独立场景，并确认 `notes`、`deletedNotes`、`projects`、`courses`、`directories`、`images`、`aiResults`、`knowledgeEntities`、`noteEntityLinks`、`knowledgeRelations` 和 `knowledgeAuditLogs` 均由应用初始化；任何 `onupgradeneeded` 都会中止并使测试失败。
 
-- 当前年份年度视图使用 53/54 周的自然周网格；首页 compact 足迹由既有回归测试继续保护为最近 20 个自然周。
-- 历史年份可切换，再切回当前年份；月份标签、Tooltip、方向键移动、Enter/Space 激活均通过。
-- 同一本地日期两篇笔记正确筛选到首页；零篇过去日期显示“这一天没有创建笔记。”；future 与 padding 格不渲染为按钮。
-- 测试数据只代表笔记创建足迹，没有将学习时长或学习状态伪装成创建量。
+最新自动化验证包括：
 
-## 实体图谱与生命周期
+- `npm run typecheck` 通过；
+- `npm run test` 通过（328 项 Vitest 测试和 26 项 Node 测试）；
+- `npm run build` 通过；
+- 标准生产 E2E 连续两次均为 33/33 通过；
+- `git diff --check` 通过。
 
-- 300 个 approved 实体与 299 条 approved 关系最终渲染为一个 React Flow 实例；suggested/rejected fixture 不会混入。
-- 节点可导航到稳定实体详情路由，浏览器返回后可再次加载实体图谱。
-- E0 十轮循环每轮都回到首页后检查：不存在 React Flow、CodeMirror 或 Tooltip 残留；无 pageerror 或 console error。
-- 首页 DOM 节点数的最大差为不超过 20，未呈现逐轮单向增长；这是一项 DOM 生命周期信号，不是 heap 无泄漏证明。
+## 真实 Microsoft Edge 手工验收
 
-## 网络、安全与数据库边界
+**状态：PASS — 已由用户在独立 Microsoft Edge 测试 Profile 中完成真实手工验收。**
 
-- 所有 HTTP(S) 非 `127.0.0.1:4174` 请求都会被记录、取消并导致测试失败；本次没有被禁止请求。
-- 所有 E0 场景未发生 pageerror 或 console error。
-- E0 不调用 AI 供应商，也没有 mock React、Dexie、React Flow 或生产服务。
-- E0 测试不创建 schema、不升级 Dexie、不删除数据库；每个 Playwright context 独立关闭，不访问 Edge/Chrome 用户 profile。
+手工操作使用本地生产构建与稳定 fixture；未删除、清空或迁移用户日常浏览器 Profile 或真实知识库数据。用户确认除最初发现的图谱 UI 问题外，其余功能均无问题；图谱问题修复后已完成定向复查。
+
+| 场景 | 结果 | 证据/备注 |
+| --- | --- | --- |
+| 首页和启动 | PASS | 用户完成真实 Edge 启动与首页检查。 |
+| 5 KiB 编辑 | PASS | 未发现输入或保存异常。 |
+| 50 KiB 编辑 | PASS | 未发现输入或保存异常。 |
+| 250 KiB 编辑 | PASS | 未发现数据丢失、保存失败或明显编辑异常。 |
+| 中文 IME | PASS | 未发现组合输入异常。 |
+| 保存和切换 | PASS | 未发现保存失败或切换后数据错误。 |
+| 辅助面板 | PASS | 面板及既有辅助入口可用。 |
+| 年度足迹 | PASS | 未发现日期筛选或导航错误。 |
+| 键盘导航 | PASS | 年度足迹交互通过。 |
+| 正文搜索 | PASS | 深正文搜索与全文打开通过。 |
+| Wiki 链接 | PASS | 前链与反链导航通过。 |
+| 300 实体图谱 | PASS | 修复后首屏可读性、交互和详情导航通过。 |
+| 十轮循环 | PASS | 未观察到持续变慢或残留界面问题。 |
+| Console 错误 | PASS | 无红色错误。 |
+| 外部请求 | PASS | 手工验收中未发现非预期外部请求。 |
+
+### 图谱 UI 问题、修复与复查闭环
+
+首次手工验收发现两个体验问题：
+
+1. 图谱顶部统计信息被绝对定位的模式切换器遮挡；
+2. 300 实体场景的节点、边和边标签过于拥挤。
+
+修复提交：`772040b fix: refine graph toolbar and readability`。
+
+修复内容：
+
+- 模式切换器恢复到正常响应式布局流；
+- 图谱顶部按 Grid/Flex 分区，窄屏允许换行；
+- 调整 link distance、斥力和碰撞半径；
+- 增大 `fitView` padding；
+- 默认隐藏边标签，保留连接线和有向/对称关系语义。
+
+修复后的真实 Edge 复查结果：顶部遮挡、窄屏工具栏、300 实体可读性、平移缩放与 MiniMap、实体详情导航和快速切换均为 PASS；Console 无错误。该问题状态为 **RESOLVED**，不属于未解决风险。
+
+### 编辑器辅助面板 E2E 稳定性
+
+完整 E2E 曾发现编辑器辅助面板用例的状态等待不稳定。修复提交：`fd3f395 test: stabilize editor panel e2e`。
+
+根因是路由切换的中间帧使用瞬时 `panel.count()` 判断，未等待“面板已显示”或“打开按钮可见”的稳定状态。测试改为等待真实、互斥的用户可观察状态，并验证目标 tab 已选中；这不是产品业务回归。
+
+- 单 worker 重复：10/10 通过；
+- 多 worker 重复：10/10 通过；
+- 与图谱组合重复：10/10 通过；
+- 标准生产 E2E：连续两次 33/33 通过。
 
 ## 性能复测
 
-完整原始结果见 [2026-07-18-e0-final.json](../../../performance/baseline/2026-07-18-e0-final.json)。以下是三轮中位数，属于当前机器上的诊断采样，不构成设备敏感 CI 门禁。
+完整原始结果见 [2026-07-18-e0-final.json](../../../performance/baseline/2026-07-18-e0-final.json)。以下为三轮中位数，是当前机器上的诊断采样，不构成设备敏感 CI 门禁。
 
 | 项目 | 规模 | 中位数结果 |
 | --- | --- | --- |
@@ -70,99 +126,17 @@
 | 生命周期 | 10 轮 | DOM delta 0；page errors 0 |
 | Backup 原生快照代理 | 100×1 KiB / 500×5 KiB | 4.0 / 21.5 ms 总时间 |
 
-本次 `dist` 总计 2.612 MiB；最大 chunk 是 `html2pdf`（935,882 bytes，gzip 263,986 bytes）。这项既有包体风险只记录，不在 E0 中优化。
+本次 `dist` 总计 2.612 MiB；最大 chunk 为 `html2pdf`（935,882 bytes，gzip 263,986 bytes）。该既有构建警告仅记录，未在本阶段修改。
 
-### 测量限制
+## 可信度边界与未记录元数据
 
-- Playwright Chromium 不是 Microsoft Edge，headless 也不是实际用户设备环境。
-- `performance.memory` 仅为 Chromium best-effort 数据；DOM 稳定不等于证明不存在 heap 泄漏。
-- 浏览器没有安全、通用的 listener 数量 API，因此 listener 指标为 unavailable。
-- 热力图聚合没有生产埋点，首次可见时间包含聚合与渲染。
-- Backup 指标使用隔离页面内的原生 IndexedDB 快照/序列化代理，不暴露或替代 `backupService` 内部实现。
-- 未得到低配 GPU、数小时运行、真实 IME 或真实 Edge 的结论。
+- DOM 稳定不等于严格证明不存在 Heap 泄漏；Edge 任务管理器只能提供粗略观察。
+- 未进行数小时或数天的长期运行验证。
+- 正文搜索和孤立链接检查仍可能按需执行 O(N) 扫描。
+- 300 实体图谱仍是较重页面，但当前真实手工体验通过。
+- `html2pdf` 独立 chunk 仍保留既有构建大小警告。
+- 用户已完成真实 Edge 手工验收，但未记录具体 Edge 版本、Windows 构建号、CPU、GPU、内存读数、显示缩放和分辨率；这不影响功能验收结论，但限制后续逐机复现元数据。
 
-## RED 记录
+## 最终结论
 
-首次新增定向 E2E 的结果为 `No tests found`，因为 E0 spec 尚不存在。首次实现后的断言失败来自测试错误地假设 CodeMirror 会渲染长正文尾部、以及课程卡片完整 textContent 等于标题；测试改为先聚焦并跳转到文档尾部、再按真实可见卡片结构断言。未修改任何业务代码。最终六个 E0 场景全部通过。
-
-## Microsoft Edge 手工验收
-
-状态：**PENDING — 需要用户在真实 Microsoft Edge 执行。**
-
-### 启动与隔离
-
-1. 在仓库根目录运行 `npm run build`。
-2. 在第二个终端运行 `npm run e2e:server`，保持 `http://127.0.0.1:4174` 可访问。
-3. 在第三个终端为独立 Edge profile 写入安全 fixture：
-
-   ```powershell
-   node scripts/e0-seed-edge-fixtures.mjs
-   ```
-
-   脚本只接受 `learning-knowledge-base-e0-edge` 标记的 profile、`http://127.0.0.1:4174`（或 localhost 等价地址），并在应用已初始化当前 schema 后写入稳定 `e0-` 记录。它不会使用 `indexedDB.deleteDatabase()`；重复运行只覆盖相同 fixture。若要先清理旧 fixture 再重建，只使用 `node scripts/e0-seed-edge-fixtures.mjs --reset`，它只删除各表中 `e0-` 主键，保留任何非 `e0-` 记录。
-
-4. 使用独立 Edge profile，而不是日常 profile：
-
-   ```powershell
-   & "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" --user-data-dir="$env:TEMP\learning-knowledge-base-e0-edge" http://127.0.0.1:4174
-   ```
-
-5. 如果 Edge 安装在 64 位目录，使用：
-
-   ```powershell
-   & "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" --user-data-dir="$env:TEMP\learning-knowledge-base-e0-edge" http://127.0.0.1:4174
-   ```
-
-6. 不要删除或清空日常浏览器的 IndexedDB；脚本和 Edge 都只操作独立 E0 profile。若脚本输出仍显示空数据或拒绝 profile/URL，停止手工验收并保留输出。
-7. 先记录：Windows 版本、Edge 版本、总内存、CPU、GPU、显示缩放、分辨率、电源/节能状态、后台大型程序和测试时间。可使用：
-
-   ```powershell
-   Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsBuildNumber, CsTotalPhysicalMemory, CsProcessors
-   Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion
-   ```
-
-### Edge 手工 fixture 准备
-
-`node scripts/e0-seed-edge-fixtures.mjs` 成功后应显示：2022、2024、2026 年笔记；5/50/250 KiB 正文；一门三章节课程；300 个 approved 实体；600 条 approved、5 条 pending/suggested、5 条 rejected 关系。
-
-- 两篇笔记日期：`2026-01-10`
-- 一篇笔记日期：`2026-01-11`
-- 零篇过去日期：`2026-01-12`
-- 深正文搜索词：`E0_DEEP_SEARCH_TOKEN_2026`
-- Wiki：`E0 Wiki Source` → `[[E0 Wiki Target]]`
-- 图谱详情入口：`E0 Graph Entry Entity`
-
-在启动 fixture 脚本前关闭使用同一独立 profile 的 Edge 窗口，避免 Windows profile lock。脚本完成后会关闭其 headless Edge context；再启动上面的可见 Edge 命令。它不会连接真实 AI 服务或外部 CDN。
-
-### 手工场景清单
-
-| 场景 | 结果 | 证据/备注 |
-| --- | --- | --- |
-| 首页和启动 | PENDING | |
-| 5 KiB 编辑 | PENDING | |
-| 50 KiB 编辑 | PENDING | |
-| 250 KiB 编辑 | PENDING | |
-| 中文 IME | PENDING | |
-| 保存和切换 | PENDING | |
-| 辅助面板 | PENDING | |
-| 年度足迹 | PENDING | |
-| 键盘导航 | PENDING | |
-| 正文搜索 | PENDING | |
-| Wiki 链接 | PENDING | |
-| 300 实体图谱 | PENDING | |
-| 十轮循环 | PENDING | |
-| Console 错误 | PENDING | |
-| 外部请求 | PENDING | |
-
-按以下顺序执行：
-
-1. **首页**：确认卡片、compact 20 周足迹、随机回顾与课程继续学习可见；打开 Console 确认没有红色错误，并在 Edge 任务管理器记录粗略标签页内存。
-2. **编辑器**：分别操作 5/50/250 KiB 笔记。每篇输入中文 IME 组合文本、英文、删除、Undo/Redo、约 2 KiB 粘贴、等待保存、预览/编辑切换、切换笔记、返回并刷新。250 KiB 额外快速连续输入、短时 Backspace、Ctrl+F、滚至末尾、五个辅助标签、comfortable/wide、进入/退出 focus。记录丢字、跳光标、保存文案、闪烁与主观流畅度。
-3. **年度足迹**：切换年份，检查 365/366 日布局和窄窗口内部横向滚动；hover Tooltip，Tab 进入日期网格，方向键、Enter/Space 激活有笔记及零篇日期；future/padding 不可交互。
-4. **搜索和投影**：搜索只存在于正文深处的唯一词，打开后检查全文，再回首页确认仅短预览；检查 Wiki 前链与反链。
-5. **300 实体图谱**：观察加载反馈，平移、缩放、MiniMap，点击节点到详情，返回并重复切换笔记/实体图谱 3—5 次；记录冻结、空白、重复图谱、Console 错误和粗略内存。
-6. **十轮循环**：首页→250 KiB 编辑器→辅助面板→年度足迹→300 实体图谱→实体详情→首页。第 1、5、10 轮记录 Edge 任务管理器标签页内存、UI 是否变慢、Console 错误、残留 Tooltip/图谱/编辑器。内存数值可波动；只有持续明显增长且伴随体验恶化才记录为可疑。
-
-## 结论
-
-自动化生产验收通过，满足阶段一至四的自动化集成条件。真实 Edge 手工验收仍为 PENDING。只有自动化验收全绿、用户完成上述独立 Edge profile 清单且无阻断级 FAIL、并完成审查后，才可以考虑最终 push。
+产品体验升级阶段验收通过，当前可以推送本阶段全部提交。未发现需要阻塞发布的产品问题；后续性能与长期稳定性工作应以真实测量数据为依据，而不是将本次验收解释为零风险或所有设备上的永久性能保证。
