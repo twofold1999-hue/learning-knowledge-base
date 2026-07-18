@@ -4,7 +4,21 @@
 
 它不试图替代所有通用协作工具，而是面向个人长期学习：记录原始材料、建立可追溯关联、回看学习过程，并把数据默认留在自己的浏览器中。
 
-> 产品截图将在 Task 21-B 中使用隔离演示数据生成；不会使用真实个人知识库截图。
+## 产品截图
+
+以下页面来自隔离的本地演示数据：不使用真实笔记、个人目录、浏览器默认 Profile、API Key 或外部 AI 请求。完整的可重复生成步骤见 [发布演示与截图说明](docs/RELEASE_DEMO.md)。
+
+![学习工作台首页：学习路线、创建足迹和最近笔记](docs/assets/screenshots/01-home-dashboard.png)
+
+| 编辑工作区 | 搜索与 Wiki 链接 |
+| --- | --- |
+| ![Markdown 编辑工作区与辅助面板](docs/assets/screenshots/02-editor-workspace.png) | ![按标题、标签和正文搜索笔记](docs/assets/screenshots/03-search-and-wiki.png) |
+
+| 年度创建足迹 | 课程学习进度 |
+| --- | --- |
+| ![年度笔记创建足迹](docs/assets/screenshots/04-learning-footprint.png) | ![Python Spatial Data Analysis 课程进度](docs/assets/screenshots/05-course-progress.png) |
+
+![只读、已确认知识的实体图谱](docs/assets/screenshots/06-entity-graph.png)
 
 ## 它解决什么问题
 
