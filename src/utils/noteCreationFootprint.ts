@@ -1,5 +1,3 @@
-import type { Note } from '../types'
-
 export const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'] as const
 
 export interface CalendarDay {
@@ -97,7 +95,7 @@ export function getCreationFootprintLevel(count: number): number {
 }
 
 export function summarizeNoteCreationFootprint(
-  notes: readonly Note[],
+  notes: readonly { createdAt: string }[],
   calendar: RecentWeekCalendar,
 ): NoteCreationFootprintSummary {
   const visibleDateKeys = new Set(calendar.weeks.flat().filter((day) => !day.isFuture).map((day) => day.dateKey))

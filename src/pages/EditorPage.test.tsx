@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Note } from '../types'
+import { toNoteProjection } from '../services/noteProjection'
 
 const mocks = vi.hoisted(() => ({
   updateNote: vi.fn(),
@@ -23,7 +24,7 @@ const note: Note = {
 const noteStore = {
   currentNote: note, isLoading: false, isSaving: false, saveError: null,
   fetchNote: mocks.fetchNote, createNote: vi.fn(), updateNote: mocks.updateNote,
-  synchronizePersistedNote: mocks.synchronizePersistedNote, deleteNote: vi.fn(), allNotes: [note],
+  synchronizePersistedNote: mocks.synchronizePersistedNote, deleteNote: vi.fn(), allNotes: [toNoteProjection(note)],
 }
 
 vi.mock('../stores/noteStore', () => ({

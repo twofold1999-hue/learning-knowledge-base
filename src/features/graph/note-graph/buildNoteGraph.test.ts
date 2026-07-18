@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { Note } from '../../../types'
+import type { Note, NoteProjection } from '../../../types'
+import { toNoteProjection } from '../../../services/noteProjection'
 import { buildNoteGraph } from './buildNoteGraph'
 
 const timestamp = '2026-07-13T00:00:00.000Z'
 
-function createNote(overrides: Partial<Note> & Pick<Note, 'id'>): Note {
-  return {
+function createNote(overrides: Partial<Note> & Pick<Note, 'id'>): NoteProjection {
+  return toNoteProjection({
     type: 'knowledge_fragment',
     title: '',
     content: '',
@@ -21,7 +22,7 @@ function createNote(overrides: Partial<Note> & Pick<Note, 'id'>): Note {
     createdAt: timestamp,
     updatedAt: timestamp,
     ...overrides,
-  }
+  })
 }
 
 function findNode(nodes: ReturnType<typeof buildNoteGraph>['nodes'], id: string) {

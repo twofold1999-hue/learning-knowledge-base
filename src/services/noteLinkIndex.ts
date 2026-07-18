@@ -1,4 +1,5 @@
-import type { Note } from '../types'
+import type { NoteProjection } from '../types'
+import { extractWikiTargets } from './noteProjection'
 
 export interface Forwardlink {
   title: string
@@ -7,8 +8,8 @@ export interface Forwardlink {
 
 export interface NoteLinkIndex {
   readonly scannedNoteCount: number
-  readonly notesInDisplayOrder: readonly Note[]
-  readonly noteById: ReadonlyMap<string, Note>
+  readonly notesInDisplayOrder: readonly NoteProjection[]
+  readonly noteById: ReadonlyMap<string, NoteProjection>
   readonly noteIdByNormalizedTitle: ReadonlyMap<string, string>
   readonly backlinkSourceIdsByNormalizedTitle: ReadonlyMap<string, ReadonlySet<string>>
 }
@@ -30,28 +31,13 @@ function normalizeTitle(title: string): string {
   return title.trim().toLocaleLowerCase()
 }
 
-function extractWikiTargets(content: string): string[] {
-  const seen = new Set<string>()
-  const targets: string[] = []
-
-  for (const match of content.matchAll(/\[\[([^\]]+)\]\]/g)) {
-    const title = match[1].trim()
-    const normalizedTitle = normalizeTitle(title)
-    if (!normalizedTitle || seen.has(normalizedTitle)) continue
-    seen.add(normalizedTitle)
-    targets.push(title)
-  }
-
-  return targets
-}
-
 /**
- * Builds a short-lived read-only view of the active note snapshot. If titles
- * collide after normalization, the first note in the current allNotes order
- * wins so the editor's single-noteId link contract stays deterministic.
+ * Builds a short-lived read-only view from lightweight active-note projections.
+ * Duplicate normalized titles retain the first allNotes entry for deterministic
+ * editor link resolution.
  */
-export function createNoteLinkIndex(notes: readonly Note[]): NoteLinkIndex {
-  const noteById = new Map<string, Note>()
+export function createNoteLinkIndex(notes: readonly NoteProjection[]): NoteLinkIndex {
+  const noteById = new Map<string, NoteProjection>()
   const noteIdByNormalizedTitle = new Map<string, string>()
   const backlinkSourceIdsByNormalizedTitle = new Map<string, Set<string>>()
 
@@ -62,7 +48,7 @@ export function createNoteLinkIndex(notes: readonly Note[]): NoteLinkIndex {
       noteIdByNormalizedTitle.set(normalizedTitle, note.id)
     }
 
-    for (const targetTitle of extractWikiTargets(note.content)) {
+    for (const targetTitle of note.wikiTargets) {
       const normalizedTargetTitle = normalizeTitle(targetTitle)
       let sourceIds = backlinkSourceIdsByNormalizedTitle.get(normalizedTargetTitle)
       if (!sourceIds) {
@@ -89,7 +75,7 @@ export function resolveForwardlinks(index: NoteLinkIndex, content: string): Forw
   }))
 }
 
-export function resolveBacklinks(index: NoteLinkIndex, currentNoteId: string, currentTitle: string): Note[] {
+export function resolveBacklinks(index: NoteLinkIndex, currentNoteId: string, currentTitle: string): NoteProjection[] {
   const sourceIds = index.backlinkSourceIdsByNormalizedTitle.get(normalizeTitle(currentTitle))
   if (!sourceIds) return []
   return index.notesInDisplayOrder.filter((note) => note.id !== currentNoteId && sourceIds.has(note.id))
@@ -99,10 +85,6 @@ export function getForwardlinkSignature(content: string): string {
   return extractWikiTargets(content).map(normalizeTitle).join('\u001f')
 }
 
-/**
- * Determines which side of the editor link view needs recomputing. Keeping
- * this decision pure lets normal prose edits skip unnecessary state updates.
- */
 export function planNoteLinkQuery(
   previous: NoteLinkQueryState | null,
   index: NoteLinkIndex,

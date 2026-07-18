@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useUiStore } from '../stores/uiStore'
 import { useNoteStore } from '../stores/noteStore'
 import { createBackup, importBackup, serializeBackup } from '../services/backupService'
+import { fetchFullNotesForExport } from '../services/noteService'
 import { BackupTooLargeError } from '../services/dataValidation'
 import { waitForPendingSaves } from '../services/saveCoordinator'
 import { downloadNotesAsDocx, downloadNotesAsMarkdown, downloadNotesAsPdf, downloadPortableMarkdownArchive } from '../services/exportService'
@@ -96,7 +97,7 @@ export default function SettingsPage() {
     setStatus(null)
     try {
       await waitForPendingSaves()
-      await downloadNotesAsMarkdown(allNotes)
+      await downloadNotesAsMarkdown(await fetchFullNotesForExport())
       setStatus(`已导出 ${allNotes.length} 篇笔记为 Markdown 文件。`)
     } catch (error) {
       setStatus(error instanceof Error ? `Markdown 导出失败：${error.message}` : 'Markdown 导出失败')
@@ -110,7 +111,7 @@ export default function SettingsPage() {
     setStatus(null)
     try {
       await waitForPendingSaves()
-      await downloadPortableMarkdownArchive(allNotes)
+      await downloadPortableMarkdownArchive(await fetchFullNotesForExport())
       setStatus(`已导出 iPad 笔记包：${allNotes.length} 篇 Markdown 笔记及其图片附件。`)
     } catch (error) {
       setStatus(error instanceof Error ? `iPad 笔记包导出失败：${error.message}` : 'iPad 笔记包导出失败')
@@ -124,7 +125,7 @@ export default function SettingsPage() {
     setStatus(null)
     try {
       await waitForPendingSaves()
-      await downloadNotesAsPdf(allNotes)
+      await downloadNotesAsPdf(await fetchFullNotesForExport())
       setStatus(`已导出 ${allNotes.length} 篇笔记为 PDF，可直接导入 Goodnotes 批注。`)
     } catch (error) {
       setStatus(error instanceof Error ? `PDF 导出失败：${error.message}` : 'PDF 导出失败')
@@ -138,7 +139,7 @@ export default function SettingsPage() {
     setStatus(null)
     try {
       await waitForPendingSaves()
-      await downloadNotesAsDocx(allNotes)
+      await downloadNotesAsDocx(await fetchFullNotesForExport())
       setStatus(`已导出 ${allNotes.length} 篇笔记为 Word 文档。`)
     } catch (error) {
       setStatus(error instanceof Error ? `Word 导出失败：${error.message}` : 'Word 导出失败')

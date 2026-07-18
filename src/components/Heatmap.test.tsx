@@ -1,15 +1,16 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Note } from '../types'
+import type { Note, NoteProjection } from '../types'
+import { toNoteProjection } from '../services/noteProjection'
 import { useNoteStore } from '../stores/noteStore'
 import Heatmap from './Heatmap'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 
-function note(id: string, createdAt: Date): Note {
-  return {
+function note(id: string, createdAt: Date): NoteProjection {
+  return toNoteProjection({
     id,
     type: 'knowledge_fragment',
     title: id,
@@ -25,7 +26,7 @@ function note(id: string, createdAt: Date): Note {
     videoTimestamp: null,
     createdAt: createdAt.toISOString(),
     updatedAt: createdAt.toISOString(),
-  }
+  })
 }
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true

@@ -1,28 +1,23 @@
-import type { CreateNoteInput, DeletedNote, Note, NoteFilter, NoteUpdate, TrashReason } from '../types'
+import type { CreateNoteInput, DeletedNote, Note, NoteFilter, NoteProjection, NoteUpdate, TrashReason } from '../types'
+import { toNoteProjection } from './noteProjection'
+import { toLocalDateKey } from '../utils/noteCreationFootprint'
 import { db, generateId } from './db'
 import { createDeletedNote, getReferencedImageIds, removeUnreferencedImages, toActiveNote } from './trashService'
 
-export async function fetchNotes(filter?: NoteFilter): Promise<Note[]> {
+function matchesNoteFilter(note: Note, filter?: NoteFilter): boolean {
   const tag = filter?.tag
-  let notes: Note[]
-  if (filter?.directoryId) notes = await db.notes.where('directoryId').equals(filter.directoryId).toArray()
-  else if (filter?.projectId) notes = await db.notes.where('projectId').equals(filter.projectId).toArray()
-  else if (filter?.courseId) notes = await db.notes.where('courseId').equals(filter.courseId).toArray()
-  else if (filter?.type) notes = await db.notes.where('type').equals(filter.type).toArray()
-  else if (tag) notes = await db.notes.where('tags').equals(tag).toArray()
-  else notes = await db.notes.toArray()
+  if (filter?.type && note.type !== filter.type) return false
+  if (tag && !note.tags.includes(tag)) return false
+  if (filter?.projectId && note.projectId !== filter.projectId) return false
+  if (filter?.courseId && note.courseId !== filter.courseId) return false
+  if (filter?.directoryId && note.directoryId !== filter.directoryId) return false
+  if (filter?.createdDate && toLocalDateKey(note.createdAt) !== filter.createdDate) return false
+  if (filter?.relatedConcept && (note.type !== 'knowledge_fragment' || !note.relatedConcepts.includes(filter.relatedConcept))) return false
+  return true
+}
 
-  if (filter?.type) notes = notes.filter((n) => n.type === filter.type)
-  if (tag) notes = notes.filter((n) => n.tags.includes(tag))
-  if (filter?.projectId) notes = notes.filter((n) => n.projectId === filter.projectId)
-  if (filter?.courseId) notes = notes.filter((n) => n.courseId === filter.courseId)
-  if (filter?.directoryId) notes = notes.filter((n) => n.directoryId === filter.directoryId)
-  if (filter?.createdDate) notes = notes.filter((n) => n.createdAt.slice(0, 10) === filter.createdDate)
-  if (filter?.relatedConcept) notes = notes.filter(
-    (n) => n.type === 'knowledge_fragment' && n.relatedConcepts.includes(filter.relatedConcept!),
-  )
-
-  notes.sort((a, b) => {
+function sortNoteProjections(notes: NoteProjection[], filter?: NoteFilter): NoteProjection[] {
+  return [...notes].sort((a, b) => {
     if (filter?.courseId) {
       const orderA = a.chapterOrder ?? Number.MAX_SAFE_INTEGER
       const orderB = b.chapterOrder ?? Number.MAX_SAFE_INTEGER
@@ -30,13 +25,46 @@ export async function fetchNotes(filter?: NoteFilter): Promise<Note[]> {
     }
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
+}
+
+function applyProjectionPage(notes: NoteProjection[], filter?: NoteFilter): NoteProjection[] {
   if (!filter?.limit) return notes
   const page = Math.max(1, filter.page ?? 1)
   const limit = Math.max(1, filter.limit)
-  const start = (page - 1) * limit
-  return notes.slice(start, start + limit)
+  return notes.slice((page - 1) * limit, page * limit)
 }
 
+function sourceCollection(filter?: NoteFilter) {
+  if (filter?.directoryId) return db.notes.where('directoryId').equals(filter.directoryId)
+  if (filter?.projectId) return db.notes.where('projectId').equals(filter.projectId)
+  if (filter?.courseId) return db.notes.where('courseId').equals(filter.courseId)
+  if (filter?.type) return db.notes.where('type').equals(filter.type)
+  if (filter?.tag) return db.notes.where('tags').equals(filter.tag)
+  return db.notes.toCollection()
+}
+
+/**
+ * Reads one IndexedDB record at a time and immediately converts it. IndexedDB
+ * still deserializes each record's body because the schema has no field-level
+ * projection, but this avoids a resident intermediate Note[] collection.
+ */
+export async function fetchNoteProjections(filter?: NoteFilter): Promise<NoteProjection[]> {
+  const projections: NoteProjection[] = []
+  await sourceCollection(filter).each((note) => {
+    if (matchesNoteFilter(note, filter)) projections.push(toNoteProjection(note))
+  })
+  return applyProjectionPage(sortNoteProjections(projections, filter), filter)
+}
+
+/** Explicit full-record read for one-shot export only; never use for lists. */
+export async function fetchFullNotesForExport(): Promise<Note[]> {
+  return (await db.notes.toArray()).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  )
+}
+
+/** @deprecated Use fetchNoteProjections for all list consumers. */
+export const fetchNotes = fetchNoteProjections
 export async function fetchNote(noteId: string): Promise<Note> {
   const note = await db.notes.get(noteId)
   if (!note) throw new Error('Note not found')
@@ -184,12 +212,16 @@ export async function reorderCourseNotes(noteIds: string[]): Promise<void> {
   })
 }
 
-export async function searchNotes(query: string): Promise<Note[]> {
-  const notes = await db.notes.toArray()
-  const lower = query.toLowerCase()
-  return notes.filter((n) =>
-    n.title.toLowerCase().includes(lower) ||
-    n.content.toLowerCase().includes(lower) ||
-    n.tags.some((t) => t.toLowerCase().includes(lower))
-  ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+/** Full-text matching happens on demand. Results immediately become projections. */
+export async function searchNoteProjections(query: string, limit = 20): Promise<NoteProjection[]> {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const matches: NoteProjection[] = []
+  await db.notes.toCollection().each((note) => {
+    if (!normalizedQuery || note.title.toLocaleLowerCase().includes(normalizedQuery) || note.content.toLocaleLowerCase().includes(normalizedQuery) || note.tags.some((tag) => tag.toLocaleLowerCase().includes(normalizedQuery))) {
+      matches.push(toNoteProjection(note))
+    }
+  })
+  return sortNoteProjections(matches).slice(0, Math.max(1, limit))
 }
+
+export const searchNotes = searchNoteProjections

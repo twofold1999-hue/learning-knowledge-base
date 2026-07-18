@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useProjectStore } from '../stores/projectStore'
 import { useUiStore } from '../stores/uiStore'
-import { searchNotes, getAllIndexedNotes, initSearchIndex } from '../services/searchService'
-import type { Note } from '../types'
+import { getRecentSearchNotes, searchNotes } from '../services/searchService'
+import type { NoteProjection } from '../types'
 
 interface CommandItem {
   id: string
@@ -19,7 +19,8 @@ export default function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [indexedNotes, setIndexedNotes] = useState<Note[]>([])
+  const [indexedNotes, setIndexedNotes] = useState<NoteProjection[]>([])
+  const [searchResults, setSearchResults] = useState<NoteProjection[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -51,12 +52,24 @@ export default function CommandPalette() {
     if (isOpen) {
       setQuery('')
       setSelectedIndex(0)
-      void initSearchIndex().then(() => setIndexedNotes(getAllIndexedNotes())).catch((error) => {
-        console.error('Failed to initialize search:', error)
+      void getRecentSearchNotes().then(setIndexedNotes).catch((error) => {
+        console.error('Failed to load recent notes:', error)
       })
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen || !query.trim()) {
+      setSearchResults([])
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      void searchNotes(query, 10).then((results) => { if (!cancelled) setSearchResults(results) }).catch((error) => console.error('Failed to search notes:', error))
+    }, 120)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [isOpen, query])
 
   // 构建所有命令项
   const allItems = useMemo<CommandItem[]>(() => {
@@ -143,7 +156,7 @@ export default function CommandPalette() {
       })
     }
 
-    for (const note of indexedNotes) {
+    for (const note of [...new Map([...indexedNotes, ...searchResults].map((item) => [item.id, item])).values()]) {
       items.push({
         id: 'note-' + note.id,
         category: '笔记',
@@ -156,7 +169,7 @@ export default function CommandPalette() {
     }
 
     return items
-  }, [projects, courses, indexedNotes, navigate, setTheme, close])
+  }, [projects, courses, indexedNotes, searchResults, navigate, setTheme, close])
 
   // 过滤
   const filteredItems = useMemo(() => {
@@ -174,9 +187,8 @@ export default function CommandPalette() {
         return text.includes(lower)
       })
 
-    const searchResults = searchNotes(query, 10)
     const noteItems = searchResults
-      .map((note) => allItems.find((i) => i.id === 'note-' + note.id))
+      .map((note) => allItems.find((item) => item.id === 'note-' + note.id))
       .filter(Boolean) as CommandItem[]
 
     return [...nonNoteItems, ...noteItems]

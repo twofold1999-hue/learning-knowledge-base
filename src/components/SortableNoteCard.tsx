@@ -1,10 +1,9 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useNavigate } from 'react-router-dom'
-import type { Note } from '../types'
-import { isLearned } from '../utils/noteUtils'
+import type { NoteProjection } from '../types'
 
-export default function SortableNoteCard({ note, onToggleLearned }: { note: Note; onToggleLearned?: (note: Note) => void }) {
+export default function SortableNoteCard({ note, onToggleLearned }: { note: NoteProjection; onToggleLearned?: (note: NoteProjection) => void }) {
   const navigate = useNavigate()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: note.id })
 
@@ -14,13 +13,8 @@ export default function SortableNoteCard({ note, onToggleLearned }: { note: Note
     opacity: isDragging ? 0.5 : 1,
   }
 
-  const excerpt = note.content
-    .replace(/!\x5B.*?\x5D\x28.*?\x29/g, '[图片]')
-    .replace(/\x5B([^\x5D]*)\x5D\x28[^)]*\x29/g, '$1')
-    .replace(/[#*`~>_\-]/g, '')
-    .replace(/\n+/g, ' ')
-    .slice(0, 100)
-  const learned = isLearned(note.content)
+  const excerpt = note.contentPreview
+  const learned = note.isLearned
 
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime()

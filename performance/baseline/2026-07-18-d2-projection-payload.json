@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-07-18T07:03:26.494Z",
+  "kind": "synthetic-projection-payload-proxy",
+  "limitation": "This measures serialized fixture payload, not IndexedDB field projection or browser heap.",
+  "samples": [
+    {
+      "noteCount": 100,
+      "projectionMsMedian": 2.36,
+      "projectionBytes": 98091,
+      "fullBytes": 1938761,
+      "ratio": 0.0506
+    },
+    {
+      "noteCount": 500,
+      "projectionMsMedian": 9.31,
+      "projectionBytes": 490891,
+      "fullBytes": 9695561,
+      "ratio": 0.0506
+    },
+    {
+      "noteCount": 2000,
+      "projectionMsMedian": 33.23,
+      "projectionBytes": 1964891,
+      "fullBytes": 38787561,
+      "ratio": 0.0507
+    }
+  ]
+}

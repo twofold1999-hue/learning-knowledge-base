@@ -19,7 +19,8 @@ import { useProjectStore } from '../stores/projectStore'
 import { useNoteStore } from '../stores/noteStore'
 import SortableNoteCard from '../components/SortableNoteCard'
 import NoteCard from '../components/NoteCard'
-import { isLearned, setLearnedContent } from '../utils/noteUtils'
+import { setLearnedContent } from '../utils/noteUtils'
+import { fetchNote as fetchFullNote } from '../services/noteService'
 
 export default function CourseDetailPage() {
   const { courseId } = useParams()
@@ -103,9 +104,9 @@ export default function CourseDetailPage() {
   }
 
   const handleToggleLearned = async (note: typeof sortedNotes[number]) => {
-    const content = setLearnedContent(note.content, !isLearned(note.content))
-    setSortedNotes((items) => items.map((item) => item.id === note.id ? { ...item, content } : item))
     try {
+      const persistedNote = await fetchFullNote(note.id)
+      const content = setLearnedContent(persistedNote.content, !note.isLearned)
       await useNoteStore.getState().updateNote(note.id, { content })
     } catch (error) {
       console.error('更新章节学习状态失败：', error)
@@ -117,7 +118,7 @@ export default function CourseDetailPage() {
     navigate(`/editor/${encodeURIComponent(chapter.id)}?video=1`)
   }
 
-  const learnedCount = sortedNotes.filter((note) => isLearned(note.content)).length
+  const learnedCount = sortedNotes.filter((note) => note.isLearned).length
   const plannedChapters = course?.totalChapters ?? sortedNotes.length
   const progress = plannedChapters > 0 ? Math.min(100, Math.round(learnedCount / plannedChapters * 100)) : 0
 

@@ -19,6 +19,30 @@ export interface Note {
   updatedAt: string
 }
 
+/**
+ * The long-lived list and navigation shape for active notes. It deliberately
+ * excludes Markdown content; consumers requiring a body must fetch one Note.
+ */
+export interface NoteProjection {
+  id: string
+  type: NoteType
+  title: string
+  tags: readonly string[]
+  relatedConcepts: readonly string[]
+  directoryId: string | null
+  projectId: string | null
+  courseId: string | null
+  chapterOrder: number | null
+  sourceLocation: string | null
+  mediaUrl: string | null
+  videoTimestamp: string | null
+  createdAt: string
+  updatedAt: string
+  contentPreview: string
+  wikiTargets: readonly string[]
+  isLearned: boolean
+}
+
 export type TrashReason = 'manual' | 'project_deleted' | 'course_deleted'
 
 export interface DeletedNote extends Note {

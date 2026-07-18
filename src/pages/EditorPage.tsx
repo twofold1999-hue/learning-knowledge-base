@@ -29,7 +29,7 @@ import AIHistoryPanel from '../components/AIHistoryPanel'
 import KnowledgeOverviewPanel from '../components/KnowledgeOverviewPanel'
 import { formatVideoTimestamp, isBilibiliVideoUrl, openBilibiliStudy } from '../services/biliStudyBridge'
 import { getTagColor } from '../utils/tagColors'
-import type { Note, NoteType, NoteUpdate } from '../types'
+import type { Note, NoteProjection, NoteType, NoteUpdate } from '../types'
 
 const CodeMirrorEditor = lazy(() => import('../components/CodeMirrorEditor'))
 
@@ -62,7 +62,7 @@ function readEditorWidthMode(): EditorWidthMode {
   }
 }
 
-function haveSameBacklinks(current: Note[], next: Note[]): boolean {
+function haveSameBacklinks(current: NoteProjection[], next: NoteProjection[]): boolean {
   return current.length === next.length && current.every((note, index) => note.id === next[index]?.id)
 }
 
@@ -113,7 +113,7 @@ export default function EditorPage() {
   const [showVideoPanel, setShowVideoPanel] = useState(false)
   const [biliStudyMessage, setBiliStudyMessage] = useState('')
   const [renderHtml, setRenderHtml] = useState('')
-  const [backlinks, setBacklinks] = useState<import('../types').Note[]>([])
+  const [backlinks, setBacklinks] = useState<NoteProjection[]>([])
   const [forwardlinks, setForwardlinks] = useState<{ title: string; noteId: string | null }[]>([])
   const [editorWidthMode, setEditorWidthMode] = useState<EditorWidthMode>(readEditorWidthMode)
   const [isFocusMode, setIsFocusMode] = useState(false)

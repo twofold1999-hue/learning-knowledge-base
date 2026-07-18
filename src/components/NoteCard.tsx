@@ -1,19 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import type { Note } from '../types'
+import type { NoteProjection } from '../types'
 import { getTagColor } from '../utils/tagColors'
-import { isLearned } from '../utils/noteUtils'
 
-export default function NoteCard({ note, onToggleLearned, onPlayVideo, playLabel }: { note: Note; onToggleLearned?: (note: Note) => void; onPlayVideo?: (note: Note) => void; playLabel?: string }) {
+export default function NoteCard({ note, onToggleLearned, onPlayVideo, playLabel }: { note: NoteProjection; onToggleLearned?: (note: NoteProjection) => void; onPlayVideo?: (note: NoteProjection) => void; playLabel?: string }) {
   const navigate = useNavigate()
 
-  const excerpt = note.content
-    .replace(/!\x5B.*?\x5D\x28.*?\x29/g, '[图片]')
-    .replace(/\x5B([^\x5D]*)\x5D\x28[^)]*\x29/g, '$1')
-    .replace(/\x5B\x5B([^\x5D]+)\x5D\x5D/g, '↗$1')
-    .replace(/[#*`~>_\-]/g, '')
-    .replace(/\n+/g, ' ')
-    .slice(0, 100)
-
+  const excerpt = note.contentPreview
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime()
     const hours = Math.floor(diff / 3600000)
@@ -23,7 +15,7 @@ export default function NoteCard({ note, onToggleLearned, onPlayVideo, playLabel
     if (days < 30) return days + ' 天前'
     return new Date(dateStr).toLocaleDateString('zh-CN')
   }
-  const learned = isLearned(note.content)
+  const learned = note.isLearned
 
   return (
     <div

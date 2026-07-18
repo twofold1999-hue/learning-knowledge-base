@@ -11,10 +11,11 @@ const mocks = vi.hoisted(() => ({
   getLocalBackupStatus: vi.fn(), connectLocalBackupDirectory: vi.fn(), disconnectLocalBackupDirectory: vi.fn(), writeLocalBackup: vi.fn(),
   setTheme: vi.fn(), loadDeletedNotes: vi.fn(), restoreDeletedNote: vi.fn(), permanentlyDeleteNote: vi.fn(), emptyTrash: vi.fn(),
   downloadNotesAsDocx: vi.fn(), downloadNotesAsMarkdown: vi.fn(), downloadNotesAsPdf: vi.fn(), downloadPortableMarkdownArchive: vi.fn(),
+  allNotes: [] as unknown[],
 }))
 
 vi.mock('../stores/uiStore', () => ({ useUiStore: (selector: (state: { theme: 'light', setTheme: typeof mocks.setTheme }) => unknown) => selector({ theme: 'light', setTheme: mocks.setTheme }) }))
-vi.mock('../stores/noteStore', () => ({ useNoteStore: (selector: (state: Record<string, unknown>) => unknown) => selector({ deletedNotes: [], allNotes: [], loadDeletedNotes: mocks.loadDeletedNotes, restoreDeletedNote: mocks.restoreDeletedNote, permanentlyDeleteNote: mocks.permanentlyDeleteNote, emptyTrash: mocks.emptyTrash }) }))
+vi.mock('../stores/noteStore', () => ({ useNoteStore: (selector: (state: Record<string, unknown>) => unknown) => selector({ deletedNotes: [], allNotes: mocks.allNotes, loadDeletedNotes: mocks.loadDeletedNotes, restoreDeletedNote: mocks.restoreDeletedNote, permanentlyDeleteNote: mocks.permanentlyDeleteNote, emptyTrash: mocks.emptyTrash }) }))
 vi.mock('../services/backupService', () => ({ createBackup: mocks.createBackup, importBackup: mocks.importBackup, serializeBackup: mocks.serializeBackup }))
 vi.mock('../services/saveCoordinator', () => ({ waitForPendingSaves: mocks.waitForPendingSaves }))
 vi.mock('../services/localBackupService', () => ({ getLocalBackupStatus: mocks.getLocalBackupStatus, connectLocalBackupDirectory: mocks.connectLocalBackupDirectory, disconnectLocalBackupDirectory: mocks.disconnectLocalBackupDirectory, writeLocalBackup: mocks.writeLocalBackup }))
@@ -45,6 +46,7 @@ beforeEach(async () => {
   mocks.createBackup.mockResolvedValue(backup)
   mocks.serializeBackup.mockReturnValue('{"backup":true}')
   mocks.waitForPendingSaves.mockResolvedValue(undefined)
+  mocks.allNotes = []
   mocks.getLocalBackupStatus.mockResolvedValue({ supported: false, connected: false, directoryName: null })
   vi.stubGlobal('confirm', vi.fn(() => true))
   vi.stubGlobal('setTimeout', ((callback: TimerHandler) => { if (typeof callback === 'function') callback(); return 0 }) as typeof setTimeout)
@@ -71,6 +73,16 @@ describe('SettingsPage 完整备份导出', () => {
     click.mockRestore()
   })
 
+  it('reads complete notes directly for Markdown export instead of using list projections', async () => {
+    const note: Note = { id: 'note_full_export', type: 'knowledge_fragment', title: '完整导出', content: '# 完整 Markdown\n\n仅正文可见', tags: [], relatedConcepts: [], directoryId: null, projectId: null, courseId: null, chapterOrder: null, sourceLocation: null, mediaUrl: null, videoTimestamp: null, createdAt: now, updatedAt: now }
+    await db.notes.add(note)
+    mocks.allNotes = [{ id: note.id }]
+    await renderSettings()
+    const button = [...(container?.querySelectorAll('button') ?? [])].find((element) => element.textContent === '导出单个 Markdown')
+    await act(async () => { button?.dispatchEvent(new MouseEvent('click', { bubbles: true })); await Promise.resolve(); await Promise.resolve() })
+
+    expect(mocks.downloadNotesAsMarkdown).toHaveBeenCalledWith([note])
+  })
   it('超限时不创建下载并保留 IndexedDB 数据', async () => {
     const note: Note = { id: 'note_safe', type: 'knowledge_fragment', title: '保留', content: '正文', tags: [], relatedConcepts: [], directoryId: null, projectId: null, courseId: null, chapterOrder: null, sourceLocation: null, mediaUrl: null, videoTimestamp: null, createdAt: now, updatedAt: now }
     await db.notes.add(note)

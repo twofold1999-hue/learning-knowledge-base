@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Note } from '../types'
+import type { Note, NoteProjection } from '../types'
+import { toNoteProjection } from './noteProjection'
 import {
   createNoteLinkIndex,
   planNoteLinkQuery,
@@ -7,8 +8,8 @@ import {
   resolveForwardlinks,
 } from './noteLinkIndex'
 
-function createNote(overrides: Partial<Note> & Pick<Note, 'id' | 'title'>): Note {
-  return {
+function createNote(overrides: Partial<Note> & Pick<Note, 'id' | 'title'>): NoteProjection {
+  return toNoteProjection({
     type: 'knowledge_fragment',
     content: '',
     tags: [],
@@ -23,7 +24,7 @@ function createNote(overrides: Partial<Note> & Pick<Note, 'id' | 'title'>): Note
     createdAt: '2026-07-16T00:00:00.000Z',
     updatedAt: '2026-07-16T00:00:00.000Z',
     ...overrides,
-  }
+  })
 }
 
 describe('noteLinkIndex', () => {

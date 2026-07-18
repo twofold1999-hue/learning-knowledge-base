@@ -6,7 +6,7 @@ import { useProjectStore } from '../stores/projectStore'
 import { findOrphanNotes } from '../services/linkService'
 import Heatmap from '../components/Heatmap'
 import NoteCard from '../components/NoteCard'
-import type { Note, NoteFilter } from '../types'
+import type { NoteFilter, NoteProjection } from '../types'
 import { formatLocalDateKey, toLocalDateKey } from '../utils/noteCreationFootprint'
 
 type SortBy = 'updated' | 'created' | 'title' | 'type'
@@ -29,7 +29,7 @@ export default function HomePage() {
   const orphanMode = searchParams.get('orphan') === '1'
   const [sortBy, setSortBy] = useState<SortBy>('updated')
   const [orphanIds, setOrphanIds] = useState<string[]>([])
-  const [randomNote, setRandomNote] = useState<Note | null>(null)
+  const [randomNote, setRandomNote] = useState<NoteProjection | null>(null)
 
   useEffect(() => {
     const filter: NoteFilter = {}
@@ -133,7 +133,7 @@ export default function HomePage() {
           </div>
           <button onClick={() => navigate(`/editor/${encodeURIComponent(randomNote.id)}`)} style={{ display: 'block', width: '100%', textAlign: 'left' }}>
             <div style={{ color: 'var(--ink)', fontSize: '15px', fontWeight: 600 }}>{randomNote.title || '无标题'}</div>
-            <div style={{ marginTop: '4px', color: 'var(--muted)', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{randomNote.content.replace(/<!--[\s\S]*?-->/g, '').replace(/[#*`~>_\-\[\]()]/g, '').slice(0, 90) || '空笔记'}</div>
+            <div style={{ marginTop: '4px', color: 'var(--muted)', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{randomNote.contentPreview.slice(0, 90) || '空笔记'}</div>
           </button>
         </section>
       )}

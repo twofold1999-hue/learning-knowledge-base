@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AIResult, DeletedNote, ImageRecord, KnowledgeAuditLog, KnowledgeEntity, KnowledgeRelation, Note, NoteEntityLink } from '../types'
 import { db } from './db'
-import { createNote, emptyTrash, fetchNote, fetchNotes, permanentlyDeleteNote, reorderCourseNotes, updateNote } from './noteService'
+import { createNote, emptyTrash, fetchFullNotesForExport, fetchNote, fetchNoteProjections, fetchNotes, permanentlyDeleteNote, reorderCourseNotes, searchNoteProjections, updateNote } from './noteService'
 
 const now = '2026-07-13T00:00:00.000Z'
 
@@ -61,6 +61,22 @@ describe('noteService', () => {
     expect((await fetchNotes({ courseId: 'course_1' })).map((current) => current.id)).toEqual([second, first])
   })
 
+  it('uses bounded projections for list and body search while explicit export remains full', async () => {
+    const longContent = `<!-- hidden --> ${'x'.repeat(320)} [[目标]] only-in-body`
+    const source = note('projection_source', longContent)
+    await db.notes.add(source)
+
+    const listed = await fetchNoteProjections()
+    const searched = await searchNoteProjections('only-in-body')
+
+    expect(listed).toHaveLength(1)
+    expect('content' in listed[0]!).toBe(false)
+    expect(listed[0]?.contentPreview.length).toBeLessThanOrEqual(200)
+    expect(listed[0]?.wikiTargets).toEqual(['目标'])
+    expect(searched.map((item) => item.id)).toEqual([source.id])
+    expect('content' in searched[0]!).toBe(false)
+    await expect(fetchFullNotesForExport()).resolves.toEqual([source])
+  })
   it('永久删除回收站笔记时清理笔记依赖，保留知识关系、实体与审计历史', async () => {
     const target = deletedNote('deleted_note', '![删除图片](img_deleted)\n![共享图片](img_shared)')
     const active = note('active_note', '![共享图片](img_shared)')

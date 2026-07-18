@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import type { CreateNoteInput, DeletedNote, Note, NoteFilter, NoteUpdate } from '../types'
+import type { CreateNoteInput, DeletedNote, Note, NoteFilter, NoteProjection, NoteUpdate } from '../types'
 import * as noteService from '../services/noteService'
+import { toNoteProjection } from '../services/noteProjection'
 import { scheduleLocalBackup } from '../services/localBackupService'
 
 let noteListRequest = 0
@@ -8,8 +9,8 @@ let noteRequest = 0
 let activeSaves = 0
 
 interface NoteState {
-  notes: Note[]
-  allNotes: Note[]
+  notes: NoteProjection[]
+  allNotes: NoteProjection[]
   deletedNotes: DeletedNote[]
   currentNote: Note | null
   isLoading: boolean
@@ -30,6 +31,10 @@ interface NoteState {
   searchNotes: (query: string) => Promise<void>
 }
 
+function replaceProjection(items: readonly NoteProjection[], projection: NoteProjection): NoteProjection[] {
+  return items.map((item) => item.id === projection.id ? projection : item)
+}
+
 export const useNoteStore = create<NoteState>((set) => ({
   notes: [],
   allNotes: [],
@@ -40,7 +45,7 @@ export const useNoteStore = create<NoteState>((set) => ({
   saveError: null,
   loadAllNotes: async () => {
     try {
-      set({ allNotes: await noteService.fetchNotes() })
+      set({ allNotes: await noteService.fetchNoteProjections() })
     } catch (error) {
       console.error('Failed to load all notes:', error)
     }
@@ -56,10 +61,10 @@ export const useNoteStore = create<NoteState>((set) => ({
     const requestId = ++noteListRequest
     set({ isLoading: true })
     try {
-      const notes = await noteService.fetchNotes(filter)
+      const notes = await noteService.fetchNoteProjections(filter)
       if (requestId === noteListRequest) set({ notes, isLoading: false })
-    } catch (e) {
-      console.error('Failed to fetch notes:', e)
+    } catch (error) {
+      console.error('Failed to fetch notes:', error)
       if (requestId === noteListRequest) set({ isLoading: false })
     }
   },
@@ -69,17 +74,18 @@ export const useNoteStore = create<NoteState>((set) => ({
     try {
       const note = await noteService.fetchNote(noteId)
       if (requestId === noteRequest) set({ currentNote: note, isLoading: false })
-    } catch (e) {
-      console.error('Failed to fetch note:', e)
+    } catch (error) {
+      console.error('Failed to fetch note:', error)
       if (requestId === noteRequest) set({ isLoading: false, currentNote: null })
     }
   },
   createNote: async (data) => {
     const id = await noteService.createNote(data)
     const note = await noteService.fetchNote(id)
+    const projection = toNoteProjection(note)
     set((state) => ({
       currentNote: note,
-      allNotes: [note, ...state.allNotes.filter((item) => item.id !== id)],
+      allNotes: [projection, ...state.allNotes.filter((item) => item.id !== id)],
     }))
     scheduleLocalBackup()
     return id
@@ -89,33 +95,35 @@ export const useNoteStore = create<NoteState>((set) => ({
     set({ isSaving: true, saveError: null })
     try {
       const updatedNote = await noteService.updateNote(noteId, data)
+      const projection = toNoteProjection(updatedNote)
       activeSaves -= 1
       set((state) => ({
         isSaving: activeSaves > 0,
         currentNote: state.currentNote?.id === noteId ? updatedNote : state.currentNote,
-        notes: state.notes.map((note) => note.id === noteId ? updatedNote : note),
-        allNotes: state.allNotes.map((note) => note.id === noteId ? updatedNote : note),
+        notes: replaceProjection(state.notes, projection),
+        allNotes: replaceProjection(state.allNotes, projection),
       }))
       scheduleLocalBackup()
-    } catch (e) {
+    } catch (error) {
       activeSaves = Math.max(0, activeSaves - 1)
       set({ isSaving: activeSaves > 0, saveError: '保存失败，请重试' })
-      throw e
+      throw error
     }
   },
   synchronizePersistedNote: (updatedNote) => {
+    const projection = toNoteProjection(updatedNote)
     set((state) => ({
       currentNote: state.currentNote?.id === updatedNote.id ? updatedNote : state.currentNote,
-      notes: state.notes.map((note) => note.id === updatedNote.id ? updatedNote : note),
-      allNotes: state.allNotes.map((note) => note.id === updatedNote.id ? updatedNote : note),
+      notes: replaceProjection(state.notes, projection),
+      allNotes: replaceProjection(state.allNotes, projection),
     }))
     scheduleLocalBackup()
   },
   deleteNote: async (noteId) => {
     const deletedNote = await noteService.deleteNote(noteId)
     set((state) => ({
-      notes: state.notes.filter((n) => n.id !== noteId),
-      allNotes: state.allNotes.filter((n) => n.id !== noteId),
+      notes: state.notes.filter((note) => note.id !== noteId),
+      allNotes: state.allNotes.filter((note) => note.id !== noteId),
       deletedNotes: [deletedNote, ...state.deletedNotes.filter((note) => note.id !== noteId)],
       currentNote: state.currentNote?.id === noteId ? null : state.currentNote,
     }))
@@ -123,9 +131,10 @@ export const useNoteStore = create<NoteState>((set) => ({
   },
   restoreDeletedNote: async (noteId) => {
     const restoredNote = await noteService.restoreDeletedNote(noteId)
+    const projection = toNoteProjection(restoredNote)
     set((state) => ({
       deletedNotes: state.deletedNotes.filter((note) => note.id !== noteId),
-      allNotes: [restoredNote, ...state.allNotes.filter((note) => note.id !== noteId)],
+      allNotes: [projection, ...state.allNotes.filter((note) => note.id !== noteId)],
     }))
     scheduleLocalBackup()
   },
@@ -143,7 +152,7 @@ export const useNoteStore = create<NoteState>((set) => ({
   reorderCourseNotes: async (noteIds) => {
     await noteService.reorderCourseNotes(noteIds)
     const order = new Map(noteIds.map((id, index) => [id, index + 1]))
-    const updateOrder = (note: Note): Note => order.has(note.id) ? { ...note, chapterOrder: order.get(note.id)! } : note
+    const updateOrder = (note: NoteProjection): NoteProjection => order.has(note.id) ? { ...note, chapterOrder: order.get(note.id)! } : note
     set((state) => ({
       notes: [...state.notes.map(updateOrder)].sort((a, b) => (a.chapterOrder ?? Infinity) - (b.chapterOrder ?? Infinity)),
       allNotes: state.allNotes.map(updateOrder),
@@ -151,13 +160,14 @@ export const useNoteStore = create<NoteState>((set) => ({
     scheduleLocalBackup()
   },
   searchNotes: async (query) => {
+    const requestId = ++noteListRequest
     set({ isLoading: true })
     try {
-      const notes = await noteService.searchNotes(query)
-      set({ notes, isLoading: false })
-    } catch (e) {
-      console.error('Failed to search notes:', e)
-      set({ isLoading: false })
+      const notes = await noteService.searchNoteProjections(query)
+      if (requestId === noteListRequest) set({ notes, isLoading: false })
+    } catch (error) {
+      console.error('Failed to search notes:', error)
+      if (requestId === noteListRequest) set({ isLoading: false })
     }
   },
 }))

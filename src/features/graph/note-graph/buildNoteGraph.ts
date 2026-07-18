@@ -1,9 +1,9 @@
 import type { Edge, Node } from 'reactflow'
-import type { Note } from '../../../types'
+import type { NoteProjection } from '../../../types'
 
 export interface NoteGraphNodeData {
   label: string
-  noteType: Note['type']
+  noteType: NoteProjection['type']
 }
 
 export interface NoteGraphModel {
@@ -11,7 +11,7 @@ export interface NoteGraphModel {
   edges: Edge[]
 }
 
-export function buildNoteGraph(notes: Note[], filterTag: string): NoteGraphModel {
+export function buildNoteGraph(notes: readonly NoteProjection[], filterTag: string): NoteGraphModel {
   const visibleNotes = filterTag ? notes.filter((note) => note.tags.includes(filterTag)) : notes
   const titles = new Map(visibleNotes.map((note) => [note.title.toLocaleLowerCase(), note.id]))
   const degrees = new Map<string, number>()
@@ -19,8 +19,8 @@ export function buildNoteGraph(notes: Note[], filterTag: string): NoteGraphModel
   const added = new Set<string>()
 
   visibleNotes.forEach((note) => {
-    for (const match of note.content.matchAll(/\[\[([^\]]+)\]\]/g)) {
-      const targetId = titles.get(match[1].trim().toLocaleLowerCase())
+    for (const targetTitle of note.wikiTargets) {
+      const targetId = titles.get(targetTitle.trim().toLocaleLowerCase())
       if (!targetId || targetId === note.id) continue
       const key = [note.id, targetId].sort().join(':')
       if (added.has(key)) continue
