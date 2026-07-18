@@ -61,10 +61,10 @@ export const forceLayoutAdapter: EntityGraphLayoutAdapter = {
     const simulation = forceSimulation(simulationNodes)
       .force('link', forceLink<SimulationNode, SimulationLink>(simulationLinks)
         .id((node) => node.id)
-        .distance(160))
-      .force('charge', forceManyBody().strength(-480))
+        .distance(190))
+      .force('charge', forceManyBody().strength(-620))
       .force('center', forceCenter(0, 0))
-      .force('collide', forceCollide(48))
+      .force('collide', forceCollide(72))
 
     simulation.stop()
     try {

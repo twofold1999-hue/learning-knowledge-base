@@ -306,7 +306,11 @@ test('renders all 300 approved entities in one active React Flow instance', asyn
   await expect(entityGraph.locator('.react-flow')).toHaveCount(1)
   await expect(entityGraph.locator('.react-flow__node')).toHaveCount(300)
   await expect(entityGraph.getByText('节点 300 · 连接 299', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '笔记图谱', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '实体图谱', exact: true })).toBeVisible()
   await expect(entityGraph.getByText('已显示 300 个实体、299 条关系', { exact: true })).toBeVisible()
+  await entityGraph.locator('.react-flow__node').filter({ hasText: 'D3 实体 0' }).click()
+  await expect(page).toHaveURL(/\/knowledge\/entities\/e2e_d3_entity_0$/)
   expect(pageErrors).toEqual([])
 })
 

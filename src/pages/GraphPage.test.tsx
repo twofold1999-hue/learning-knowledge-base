@@ -25,6 +25,7 @@ vi.mock('../features/graph/entity-graph/EntityGraphView', async () => {
         'div',
         null,
         '实体图谱测试视图',
+        React.createElement('span', null, '节点 2 · 连接 1'),
         React.createElement(
           'button',
           { onClick: () => onEntityOpen?.('entity_test') },
@@ -94,6 +95,7 @@ describe('GraphPage', () => {
     expect(container?.textContent).toContain('笔记图谱测试视图')
     expect(featureState.entityRendered).not.toHaveBeenCalled()
     expect(container?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.textContent).toBe('笔记图谱')
+    expect(container?.querySelector('section.graph-page[data-graph-mode="note"] .graph-page__mode-switch')).not.toBeNull()
   })
 
   it('loads the entity graph on demand and switches back to the note graph', async () => {
@@ -102,7 +104,9 @@ describe('GraphPage', () => {
     await act(async () => { clickButton('实体图谱') })
     await flushLazy()
     expect(container?.textContent).toContain('实体图谱测试视图')
+    expect(container?.textContent).toContain('节点 2 · 连接 1')
     expect(featureState.entityRendered).toHaveBeenCalledTimes(1)
+    expect(container?.querySelector('section.graph-page[data-graph-mode="entity"] .graph-page__mode-switch')).not.toBeNull()
 
     await act(async () => { clickButton('笔记图谱') })
     expect(container?.textContent).toContain('笔记图谱测试视图')

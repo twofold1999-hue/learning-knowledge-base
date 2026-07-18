@@ -245,9 +245,22 @@ describe('EntityGraphView', () => {
       expect.objectContaining({ id: 'relation_directed', markerEnd: { type: 'arrowclosed' } }),
       expect.not.objectContaining({ id: 'relation_symmetric', markerEnd: expect.anything() }),
     ]))
+    expect(props.edges.find((edge) => edge.id === 'relation_directed')).not.toHaveProperty('label')
     expect(props.edges.find((edge) => edge.id === 'relation_symmetric')).not.toHaveProperty('markerStart')
   })
 
+  it('keeps graph statistics in a dedicated toolbar region', async () => {
+    const nodes = [businessNode('entity_cpu', 'CPU'), businessNode('entity_memory', 'Memory')]
+    const edges = [businessEdge('relation_cpu_memory', 'entity_cpu', 'entity_memory', 'depends_on')]
+    const dependencies = createDependencies({ graph: graph(nodes, edges), layout: layout(nodes, edges) })
+
+    await renderView(dependencies)
+
+    const toolbar = container?.querySelector('.entity-graph__toolbar')
+    const toolbarMeta = toolbar?.querySelector('.entity-graph__toolbar-meta')
+    expect(toolbar).not.toBeNull()
+    expect(toolbarMeta?.textContent).toContain('节点 2 · 连接 1')
+  })
   it('reports the stable entity ID when a React Flow node is clicked and remains safe without a callback', async () => {
     const onEntityOpen = vi.fn()
     const dependencies = createDependencies()

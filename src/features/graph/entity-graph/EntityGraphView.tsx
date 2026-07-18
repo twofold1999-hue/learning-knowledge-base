@@ -10,6 +10,7 @@ import ReactFlow, {
   type ReactFlowInstance,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import './EntityGraphView.css'
 import type { KnowledgeEntityType, KnowledgeRelationType } from '../../../types'
 import { isDirectedRelationType } from '../../../utils/knowledgeRelationSemantics'
 import { buildEntityGraph } from './buildEntityGraph'
@@ -49,15 +50,6 @@ const relationTypeOptions: Array<{ value: KnowledgeRelationType | 'all'; label: 
   { value: 'prerequisite', label: '前置' },
 ]
 
-const relationLabels: Record<KnowledgeRelationType, string> = {
-  related_to: '相关',
-  depends_on: '依赖',
-  contains: '包含',
-  explains: '解释',
-  contrasts_with: '对比',
-  prerequisite: '前置',
-}
-
 const entityTypeColors: Record<KnowledgeEntityType, string> = {
   concept: '#4d8ef7',
   topic: '#7c5ce6',
@@ -67,7 +59,7 @@ const entityTypeColors: Record<KnowledgeEntityType, string> = {
   term: '#64748b',
 }
 
-const FIT_VIEW_OPTIONS = { padding: 0.25 }
+const FIT_VIEW_OPTIONS = { padding: 0.32 }
 const PRO_OPTIONS = { hideAttribution: true }
 const GRAPH_PREPARATION_MESSAGES = {
   'loading-data': '正在读取知识数据…',
@@ -118,9 +110,15 @@ export default function EntityGraphView(
         border: `1px solid ${color}`,
         borderRadius: 10,
         color: 'var(--ink)',
+        boxShadow: '0 7px 18px rgba(15, 23, 42, .10)',
+        cursor: props.onEntityOpen ? 'pointer' : 'default',
         fontSize: 13,
         fontWeight: 650,
+        lineHeight: 1.35,
+        maxWidth: 168,
+        minWidth: 92,
         padding: '9px 12px',
+        textAlign: 'center',
       },
     }
   }) ?? [], [graphData])
@@ -130,9 +128,7 @@ export default function EntityGraphView(
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      label: relationLabels[edge.relation.relationType],
-      labelStyle: { fill: 'var(--muted)', fontSize: 11 },
-      style: { stroke: 'var(--border)' },
+      style: { stroke: 'var(--border)', strokeOpacity: 0.44, strokeWidth: 1.1 },
     }
 
     return isDirectedRelationType(edge.relation.relationType)
@@ -175,27 +171,31 @@ export default function EntityGraphView(
     <section
       aria-label="实体图谱"
       data-graph-preparation-phase={phase}
-      style={{ height: 'calc(100vh - 66px)', display: 'flex', flexDirection: 'column', margin: '-24px', background: 'var(--surface)' }}
+      className="entity-graph"
     >
-      <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-        <div style={{ display: 'grid', gap: 1, marginRight: 6 }}>
-          <strong style={{ color: 'var(--ink)', fontSize: 15 }}>实体图谱</strong>
-          <span style={{ color: 'var(--faint)', fontSize: 11 }}>只读 · 已确认知识</span>
+      <header className="entity-graph__toolbar">
+        <div className="entity-graph__toolbar-title">
+          <strong>实体图谱</strong>
+          <span>只读 · 已确认知识</span>
         </div>
-        <input
-          aria-label="搜索实体"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索实体名称或别名"
-          style={{ minWidth: 210, flex: '1 1 210px', maxWidth: 320, border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', background: 'var(--surface)', color: 'var(--ink)' }}
-        />
-        <select aria-label="实体类型" value={entityType} onChange={(event) => setEntityType(event.target.value as KnowledgeEntityType | 'all')} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '8px', color: 'var(--ink)', background: 'var(--surface)' }}>
-          {entityTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <select aria-label="关系类型" value={relationType} onChange={(event) => setRelationType(event.target.value as KnowledgeRelationType | 'all')} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '8px', color: 'var(--ink)', background: 'var(--surface)' }}>
-          {relationTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        {graphData ? <span style={{ color: 'var(--faint)', fontSize: 12 }}>节点 {graphData.layout.nodes.length} · 连接 {graphData.layout.edges.length}</span> : null}
+        <div className="entity-graph__toolbar-filters">
+          <input
+            aria-label="搜索实体"
+            className="entity-graph__search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索实体名称或别名"
+          />
+          <select aria-label="实体类型" value={entityType} onChange={(event) => setEntityType(event.target.value as KnowledgeEntityType | 'all')}>
+            {entityTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <select aria-label="关系类型" value={relationType} onChange={(event) => setRelationType(event.target.value as KnowledgeRelationType | 'all')}>
+            {relationTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </div>
+        <div className="entity-graph__toolbar-meta" aria-live="polite">
+          {graphData ? <span>节点 {graphData.layout.nodes.length} · 连接 {graphData.layout.edges.length}</span> : <span>节点 — · 连接 —</span>}
+        </div>
       </header>
 
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>

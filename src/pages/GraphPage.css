@@ -1,0 +1,35 @@
+.graph-page {
+  height: calc(100vh - 66px);
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.graph-page__mode-row { display: flex; justify-content: flex-end; }
+.graph-page__mode-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .08);
+}
+.graph-page__mode-switch button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.graph-page__mode-switch button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.graph-page__view { min-height: 0; }
+.graph-page[data-graph-mode="note"] .graph-page__view > div { height: 100% !important; margin: 0 !important; }
+.graph-page__loading { padding: 40px; text-align: center; color: var(--faint); }
+
+@media (max-width: 720px) {
+  .graph-page__mode-row { justify-content: flex-start; }
+  .graph-page__mode-switch { width: 100%; }
+  .graph-page__mode-switch button { flex: 1 1 0; }
+}
