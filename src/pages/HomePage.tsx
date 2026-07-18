@@ -7,7 +7,7 @@ import { findOrphanNotes } from '../services/linkService'
 import Heatmap from '../components/Heatmap'
 import NoteCard from '../components/NoteCard'
 import type { Note, NoteFilter } from '../types'
-import { toLocalDateKey } from '../utils/noteCreationFootprint'
+import { formatLocalDateKey, toLocalDateKey } from '../utils/noteCreationFootprint'
 
 type SortBy = 'updated' | 'created' | 'title' | 'type'
 
@@ -83,7 +83,7 @@ export default function HomePage() {
 
   const filterLabel = activeTag ? `标签：${activeTag}`
     : activeDir ? `目录：${activeDirName ?? '未命名目录'}`
-      : activeDate ? `${activeDate} 创建的笔记`
+      : activeDate ? `${formatLocalDateKey(activeDate)} 创建的笔记`
         : activeConcept ? `关联概念：${activeConcept}`
           : orphanMode ? '待关联笔记（无标签、无链接）'
             : activeType === 'knowledge_fragment' ? '自由笔记' : '学习单元'
@@ -164,7 +164,7 @@ export default function HomePage() {
         : displayNotes.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 20px' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
-            <p style={{ fontSize: '16px', color: 'var(--muted)' }}>{hasFilter ? '没有符合筛选条件的笔记' : '开始你的知识库'}</p>
+            <p style={{ fontSize: '16px', color: 'var(--muted)' }}>{activeDate ? '这一天没有创建笔记。' : hasFilter ? '没有符合筛选条件的笔记' : '开始你的知识库'}</p>
             {!hasFilter && <button onClick={() => navigate('/editor/new')} style={{ marginTop: '16px', background: 'var(--accent)', color: '#fff', borderRadius: '6px', padding: '10px 24px' }}>+ 新建笔记</button>}
           </div>
         ) : displayNotes.map((note) => <NoteCard key={note.id} note={note} />)}

@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Note } from '../types'
 
@@ -28,6 +28,11 @@ vi.mock('../utils/annualNoteCreationFootprint', async (importOriginal) => {
 })
 
 import HeatmapPage from './HeatmapPage'
+
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-location={`${location.pathname}${location.search}`} />
+}
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -61,7 +66,7 @@ async function renderPage(today = new Date(2026, 6, 1, 12)) {
     root = createRoot(container)
   }
   await act(async () => {
-    root?.render(<MemoryRouter><HeatmapPage today={today} /></MemoryRouter>)
+    root?.render(<MemoryRouter><HeatmapPage today={today} /><LocationProbe /></MemoryRouter>)
   })
 }
 
@@ -165,5 +170,16 @@ describe('HeatmapPage annual footprint', () => {
 
     expect(container?.querySelector('[role="alert"]')?.textContent).toContain('无法生成年度笔记创建足迹')
     expect(container?.querySelector('[data-annual-footprint-grid]')).toBeNull()
+  })
+  it('maps a selected annual date to the existing local date filter route', async () => {
+    const today = new Date(2026, 6, 1, 12)
+    noteStore.allNotes = [note('created-that-day', '2026-01-02T12:00:00.000Z')]
+    await renderPage(today)
+
+    const day = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-02"]')
+    expect(day).not.toBeNull()
+    await act(async () => { day?.click() })
+
+    expect(container?.querySelector('[data-location]')?.getAttribute('data-location')).toBe('/?date=2026-01-02')
   })
 })

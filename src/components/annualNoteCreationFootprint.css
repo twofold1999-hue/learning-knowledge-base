@@ -48,9 +48,14 @@
 .annual-footprint__week { display: grid; grid-template-rows: repeat(7, var(--annual-footprint-cell)); gap: var(--annual-footprint-gap); }
 
 .annual-footprint__day { display: block; width: var(--annual-footprint-cell); height: var(--annual-footprint-cell); border-radius: 3px; }
+button.annual-footprint__day { box-sizing: border-box; padding: 0; border: 0; cursor: pointer; appearance: none; }
+button.annual-footprint__day:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 34%, transparent); filter: brightness(1.04); }
+button.annual-footprint__day:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; box-shadow: 0 0 0 1px var(--surface); position: relative; z-index: 2; }
 .annual-footprint__day--padding { background: transparent; border: 1px solid color-mix(in srgb, var(--border) 34%, transparent); opacity: .42; }
 .annual-footprint__day--future { border: 1px dashed color-mix(in srgb, var(--faint) 44%, transparent); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--surface-2) 72%, transparent) 0 2px, transparent 2px 4px); opacity: .72; }
 .annual-footprint__day[data-today="true"] { outline: 2px solid var(--cyan); outline-offset: 1px; position: relative; z-index: 1; }
+
+.annual-footprint__tooltip { position: fixed; z-index: 30; max-width: min(280px, calc(100vw - 24px)); padding: 7px 9px; border: 1px solid color-mix(in srgb, var(--border) 92%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--surface) 96%, #000); box-shadow: 0 8px 22px color-mix(in srgb, #000 18%, transparent); color: var(--ink); font-size: 12px; line-height: 1.45; pointer-events: none; }
 
 .annual-footprint__legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--faint); font-size: 11px; }
 .annual-footprint__legend-cell { width: 12px; height: 12px; border: 1px solid color-mix(in srgb, var(--border) 48%, transparent); border-radius: 3px; }

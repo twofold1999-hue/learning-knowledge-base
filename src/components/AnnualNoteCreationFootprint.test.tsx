@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildAnnualNoteCreationFootprint } from '../utils/annualNoteCreationFootprint'
 import AnnualNoteCreationFootprint from './AnnualNoteCreationFootprint'
 
@@ -12,12 +12,13 @@ let root: Root | null = null
 async function renderFootprint(
   footprint: ReturnType<typeof buildAnnualNoteCreationFootprint>,
   todayKey?: string,
+  onSelectDate?: (dateKey: string) => void,
 ) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   await act(async () => {
-    root?.render(<AnnualNoteCreationFootprint footprint={footprint} todayKey={todayKey} />)
+    root?.render(<AnnualNoteCreationFootprint footprint={footprint} todayKey={todayKey} onSelectDate={onSelectDate} />)
   })
 }
 
@@ -29,7 +30,7 @@ afterEach(async () => {
 })
 
 describe('AnnualNoteCreationFootprint', () => {
-  it('renders a complete common-year grid from the annual contract without interactive date controls', async () => {
+  it('renders a complete common-year grid from the annual contract without interactive date controls when selection is unavailable', async () => {
     const footprint = buildAnnualNoteCreationFootprint({ year: 2023, notes: [], today: new Date(2023, 11, 31, 12) })
     await renderFootprint(footprint, '2023-06-15')
 
@@ -91,5 +92,104 @@ describe('AnnualNoteCreationFootprint', () => {
     expect(container?.querySelectorAll('[data-summary-value="0"]')).toHaveLength(3)
     expect(container?.textContent).toContain('这一年还没有笔记创建记录。')
     expect(container?.querySelectorAll('[data-date-key][data-in-selected-year="true"]')).toHaveLength(365)
+  })
+
+  it('uses one accessible interactive control per valid date and exposes a shared tooltip', async () => {
+    const onSelectDate = vi.fn()
+    const footprint = buildAnnualNoteCreationFootprint({
+      year: 2026,
+      notes: [
+        { createdAt: '2026-01-02T12:00:00.000Z' },
+        { createdAt: '2026-01-03T12:00:00.000Z' },
+        { createdAt: '2026-01-03T13:00:00.000Z' },
+      ],
+      today: new Date(2026, 0, 4, 12),
+    })
+    await renderFootprint(footprint, '2026-01-04', onSelectDate)
+
+    const zeroDay = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-01"]')
+    const oneDay = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-02"]')
+    const manyDay = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-03"]')
+    const today = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-04"]')
+
+    expect(zeroDay?.getAttribute('type')).toBe('button')
+    expect(zeroDay?.getAttribute('aria-label')).toBe('2026年1月1日，未创建笔记')
+    expect(oneDay?.getAttribute('aria-label')).toBe('2026年1月2日，创建1篇笔记')
+    expect(manyDay?.getAttribute('aria-label')).toBe('2026年1月3日，创建2篇笔记')
+    expect(today?.getAttribute('aria-label')).toBe('今天，2026年1月4日，未创建笔记')
+    expect(container?.querySelector('button[data-date-key="2026-01-05"]')).toBeNull()
+    expect(container?.querySelector('button[data-in-selected-year="false"]')).toBeNull()
+    expect(container?.querySelectorAll('button[data-date-key]')).toHaveLength(4)
+
+    await act(async () => { today?.focus() })
+    expect(container?.querySelectorAll('[role="tooltip"]')).toHaveLength(1)
+    expect(today?.getAttribute('aria-describedby')).toBeTruthy()
+    expect(container?.querySelector('[role="tooltip"]')?.textContent).toContain('2026年1月4日')
+
+    await act(async () => { today?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(container?.querySelector('[role="tooltip"]')).toBeNull()
+    expect(document.activeElement).toBe(today)
+
+    await act(async () => { today?.focus() })
+    await act(async () => { container?.querySelector('[data-annual-footprint-scroll]')?.dispatchEvent(new Event('scroll', { bubbles: true })) })
+    expect(container?.querySelector('[role="tooltip"]')).toBeNull()
+
+    await act(async () => { zeroDay?.click() })
+    expect(onSelectDate).toHaveBeenCalledExactlyOnceWith('2026-01-01')
+  })
+
+  it('keeps exactly one roving tab stop and moves by real calendar days without leaving the valid range', async () => {
+    const footprint = buildAnnualNoteCreationFootprint({ year: 2026, notes: [], today: new Date(2026, 0, 15, 12) })
+    await renderFootprint(footprint, '2026-01-15', vi.fn())
+
+    const day15 = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-15"]')
+    const day14 = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-14"]')
+    const day7 = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-07"]')
+    const day1 = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-01"]')
+
+    expect(container?.querySelectorAll('button[data-date-key][tabindex="0"]')).toHaveLength(1)
+    expect(day15?.tabIndex).toBe(0)
+
+    await act(async () => {
+      day15?.focus()
+      day15?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(document.activeElement).toBe(day14)
+    expect(day14?.tabIndex).toBe(0)
+
+    await act(async () => {
+      day14?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(document.activeElement).toBe(day7)
+
+    await act(async () => {
+      day1?.focus()
+      day1?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(document.activeElement).toBe(day1)
+  })
+
+  it('resets the roving date on a year change and leaves an entirely future year noninteractive', async () => {
+    const current = buildAnnualNoteCreationFootprint({ year: 2026, notes: [], today: new Date(2026, 0, 15, 12) })
+    const historic = buildAnnualNoteCreationFootprint({ year: 2024, notes: [], today: new Date(2026, 0, 15, 12) })
+    const future = buildAnnualNoteCreationFootprint({ year: 2027, notes: [], today: new Date(2026, 0, 15, 12) })
+    await renderFootprint(current, '2026-01-15', vi.fn())
+    const currentToday = container?.querySelector<HTMLButtonElement>('button[data-date-key="2026-01-15"]')
+    await act(async () => { currentToday?.focus() })
+    expect(container?.querySelector('[role="tooltip"]')).not.toBeNull()
+
+    await act(async () => {
+      root?.render(<AnnualNoteCreationFootprint footprint={historic} todayKey="2026-01-15" onSelectDate={vi.fn()} />)
+    })
+    expect(container?.querySelector('[role="tooltip"]')).toBeNull()
+    expect(container?.querySelector<HTMLButtonElement>('button[data-date-key="2024-01-01"]')?.tabIndex).toBe(0)
+
+    await act(async () => {
+      root?.render(<AnnualNoteCreationFootprint footprint={future} todayKey="2026-01-15" onSelectDate={vi.fn()} />)
+    })
+    expect(container?.querySelectorAll('button[data-date-key]')).toHaveLength(0)
   })
 })

@@ -20,7 +20,7 @@ test.afterEach(async ({ page }) => {
   expect(externalRequestsByPage.get(page) ?? []).toEqual([])
 })
 
-async function seedLocalDateBoundaryNotes(page: Page) {
+async function seedAnnualFootprintNotes(page: Page) {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: /把输入/ })).toBeVisible()
 
@@ -28,7 +28,13 @@ async function seedLocalDateBoundaryNotes(page: Page) {
     const pad = (value: number) => String(value).padStart(2, '0')
     const localDateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 
-    return new Promise<{ selectedDateKey: string; currentYear: number; yearDayCount: number }>((resolve, reject) => {
+    return new Promise<{
+      selectedDateKey: string
+      selectedNextDateKey: string
+      zeroDateKey: string
+      futureDateKey: string
+      currentYear: number
+    }>((resolve, reject) => {
       const request = indexedDB.open('LearningKnowledgeBase')
       let settled = false
       const fail = (error: Error | DOMException | null) => {
@@ -55,8 +61,11 @@ async function seedLocalDateBoundaryNotes(page: Page) {
         }
 
         const now = new Date()
-        const selectedDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 30)
-        const otherDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 23, 30)
+        const selectedDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 4, 9, 30)
+        const otherDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 11, 30)
+        const zeroDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10, 10, 0)
+        const futureDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 0)
+        const selectedNextDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() + 1, 9, 30)
         const transaction = database.transaction(['notes'], 'readwrite')
         const notes = transaction.objectStore('notes')
         const createNote = (id: string, title: string, createdAt: Date) => ({
@@ -77,18 +86,20 @@ async function seedLocalDateBoundaryNotes(page: Page) {
           updatedAt: createdAt.toISOString(),
         })
 
-        notes.put(createNote('e2e-note-creation-footprint-selected', 'E2E 本地日期边界笔记', selectedDate))
-        notes.put(createNote('e2e-note-creation-footprint-other', 'E2E 其他本地日期笔记', otherDate))
+        notes.put(createNote('e2e-footprint-selected-a', 'E2E 同日笔记 A', selectedDate))
+        notes.put(createNote('e2e-footprint-selected-b', 'E2E 同日笔记 B', new Date(selectedDate.getTime() + 60 * 60 * 1000)))
+        notes.put(createNote('e2e-footprint-other', 'E2E 其他日期笔记', otherDate))
 
         transaction.oncomplete = () => {
           database.close()
           if (!settled) {
             settled = true
-            const currentYear = now.getFullYear()
             resolve({
               selectedDateKey: localDateKey(selectedDate),
-              currentYear,
-              yearDayCount: new Date(currentYear, 1, 29).getMonth() === 1 ? 366 : 365,
+              selectedNextDateKey: localDateKey(selectedNextDate),
+              zeroDateKey: localDateKey(zeroDate),
+              futureDateKey: localDateKey(futureDate),
+              currentYear: now.getFullYear(),
             })
           }
         }
@@ -105,18 +116,56 @@ async function seedLocalDateBoundaryNotes(page: Page) {
   })
 }
 
-test('shows an annual local note-creation footprint without prematurely adding date navigation', async ({ page }) => {
-  const seeded = await seedLocalDateBoundaryNotes(page)
+test('supports accessible annual footprint inspection and local-date note navigation in production', async ({ page }) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  const seeded = await seedAnnualFootprintNotes(page)
 
   await page.goto('/heatmap')
   await expect(page.getByRole('heading', { name: '年度笔记创建足迹' })).toBeVisible()
-  await expect(page.getByText('年度视图', { exact: true })).toBeVisible()
-  await expect(page.getByRole('combobox', { name: '选择年份' })).toHaveValue(String(seeded.currentYear))
   await expect(page.getByRole('region', { name: `${seeded.currentYear} 年笔记创建足迹` })).toBeVisible()
-  await expect(page.locator('[data-date-key][data-in-selected-year="true"]')).toHaveCount(seeded.yearDayCount)
-  await expect(page.locator(`[data-date-key="${seeded.selectedDateKey}"]`)).toHaveAttribute('data-count', '1')
+
+  const selectedDay = page.locator(`button[data-date-key="${seeded.selectedDateKey}"]`)
+  await expect(selectedDay).toHaveCount(1)
+  await expect(selectedDay).toHaveAttribute('data-count', '2')
+  await expect(selectedDay).toHaveAttribute('tabindex', /-1|0/)
+  await selectedDay.scrollIntoViewIfNeeded()
   await expect(page.locator('[data-annual-footprint-scroll]')).toBeVisible()
-  await expect(page.getByText('当天创建笔记：少', { exact: false })).toBeVisible()
-  await expect(page.locator('button[data-date-key]')).toHaveCount(0)
-  await expect(page).toHaveURL(/\/heatmap$/)
+  await selectedDay.hover()
+  const tooltip = page.getByRole('tooltip')
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip).toContainText('创建2篇笔记')
+  await expect(selectedDay).toHaveAttribute('aria-describedby')
+
+  await selectedDay.click()
+  await expect(page).toHaveURL(new RegExp(`/\\?date=${seeded.selectedDateKey}$`))
+  await expect(page.getByText('E2E 同日笔记 A', { exact: true })).toBeVisible()
+  await expect(page.getByText('E2E 同日笔记 B', { exact: true })).toBeVisible()
+  await expect(page.getByText('E2E 其他日期笔记', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '打开笔记：E2E 同日笔记 A' }).click()
+  await expect(page).toHaveURL(/\/editor\/e2e-footprint-selected-a$/)
+
+  await page.goto('/heatmap')
+  const keyboardStart = page.locator(`button[data-date-key="${seeded.selectedDateKey}"]`)
+  await keyboardStart.focus()
+  await keyboardStart.press('ArrowDown')
+  const keyboardTarget = page.locator(`button[data-date-key="${seeded.selectedNextDateKey}"]`)
+  await expect(keyboardTarget).toBeFocused()
+  const [targetYear, targetMonth, targetDay] = seeded.selectedNextDateKey.split('-').map(Number)
+  await expect(tooltip).toContainText(`${targetYear}年${targetMonth}月${targetDay}日`)
+  await keyboardTarget.press('Enter')
+  await expect(page).toHaveURL(new RegExp(`/\\?date=${seeded.selectedNextDateKey}$`))
+
+  await page.goto('/heatmap')
+  const zeroDay = page.locator(`button[data-date-key="${seeded.zeroDateKey}"]`)
+  await zeroDay.focus()
+  await zeroDay.press(' ')
+  await expect(page).toHaveURL(new RegExp(`/\\?date=${seeded.zeroDateKey}$`))
+  await expect(page.getByText('这一天没有创建笔记。', { exact: true })).toBeVisible()
+
+  await page.goto('/heatmap')
+  await expect(page.locator(`button[data-date-key="${seeded.futureDateKey}"]`)).toHaveCount(0)
+  await expect(page.locator('button[data-in-selected-year="false"]')).toHaveCount(0)
+  await expect(page.locator('[data-date-key][data-in-selected-year="false"]')).not.toHaveCount(0)
+  expect(pageErrors).toEqual([])
 })

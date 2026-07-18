@@ -76,7 +76,7 @@ export default function HeatmapPage({ today }: HeatmapPageProps) {
             <button type="button" onClick={() => setBuildRevision((value) => value + 1)} style={{ color: 'var(--accent)', padding: '4px 0' }}>重试</button>
           </div>
         )}
-        {!isLoading && !buildResult.error && buildResult.footprint && <AnnualNoteCreationFootprint footprint={buildResult.footprint} todayKey={toLocalDateKey(stableToday)} />}
+        {!isLoading && !buildResult.error && buildResult.footprint && <AnnualNoteCreationFootprint footprint={buildResult.footprint} todayKey={toLocalDateKey(stableToday)} onSelectDate={(dateKey) => navigate(`/?date=${encodeURIComponent(dateKey)}`)} />}
       </section>
     </div>
   )
