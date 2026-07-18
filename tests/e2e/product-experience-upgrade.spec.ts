@@ -117,9 +117,22 @@ async function readNote(page: Page, noteId: string) {
 }
 
 async function openAssistantTab(page: Page, tabName: string) {
-  const panel = page.locator('[data-editor-assistant-panel]')
-  if (await panel.count() === 0) await page.getByRole('button', { name: '打开辅助面板' }).click()
-  await panel.getByRole('tab', { name: tabName }).click()
+  const panel = page.getByRole('complementary', { name: '编辑辅助面板' })
+  const openPanelButton = page.getByRole('button', { name: '打开辅助面板' })
+
+  // Route changes briefly remove both controls before the preserved panel state is rendered.
+  // Wait for either stable, user-observable state rather than snapshotting the DOM with count().
+  await expect(panel.or(openPanelButton).first()).toBeVisible()
+  if (!await panel.isVisible()) {
+    await expect(openPanelButton).toBeEnabled()
+    await openPanelButton.click()
+    await expect(panel).toBeVisible()
+  }
+
+  const tab = panel.getByRole('tab', { name: `切换到辅助标签 ${tabName}`, exact: true })
+  await expect(tab).toBeVisible()
+  await tab.click()
+  await expect(tab).toHaveAttribute('aria-selected', 'true')
   return panel
 }
 
@@ -199,11 +212,13 @@ test('combines projections, deep-body search, and refreshed wiki navigation in p
   await page.keyboard.press('Control+End')
   await expect(page.locator('.cm-content')).toContainText('E0_DEEP_BODY_TOKEN')
 
-  await page.getByRole('button', { name: /预览/ }).click()
+  await page.getByRole('button', { name: '切换到预览' }).click()
+  await expect(page.getByRole('button', { name: '开始编辑' })).toBeVisible()
   const sourceLinks = await openAssistantTab(page, '链接')
   await expect(sourceLinks.getByText(/正向链接/)).toBeVisible()
   await sourceLinks.getByRole('button', { name: 'E0 投影目标', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/editor/${targetId}$`))
+  await expect(page.locator('.editor-workspace__title')).toHaveText('E0 投影目标')
   const targetLinks = await openAssistantTab(page, '链接')
   await expect(targetLinks.getByText(/反向链接/)).toBeVisible()
   await expect(targetLinks.getByRole('button', { name: 'E0 投影来源', exact: true })).toBeVisible()
