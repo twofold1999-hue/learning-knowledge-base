@@ -12,6 +12,12 @@ import {
   validateE0SeedTarget,
 } from './e0-edge-fixtures.mjs'
 
+export function createE0PersistentContextLauncher(browserType) {
+  return (...args) => browserType.launchPersistentContext(...args)
+}
+
+export const defaultE0PersistentContextLauncher = createE0PersistentContextLauncher(chromium)
+
 export function parseE0SeedArguments(argv, environment = { tempDirectory: process.env.TEMP ?? process.env.TMP }) {
   const options = {
     profilePath: defaultE0EdgeProfilePath(environment),
@@ -130,7 +136,7 @@ async function waitForApplicationDatabase(page) {
   }, E0_DATABASE_NAME)
 }
 
-export async function seedE0EdgeFixtures(options, { launchPersistentContext = chromium.launchPersistentContext } = {}) {
+export async function seedE0EdgeFixtures(options, { launchPersistentContext = defaultE0PersistentContextLauncher } = {}) {
   const target = validateE0SeedTarget(options)
   const fixture = buildE0FixtureRecords()
   assertE0FixtureRecords(fixture.records)

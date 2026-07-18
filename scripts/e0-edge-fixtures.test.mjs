@@ -1,3 +1,4 @@
+import { chromium } from '@playwright/test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
@@ -12,7 +13,11 @@ import {
   validateE0LocalUrl,
   validateE0ProfilePath,
 } from './e0-edge-fixtures.mjs'
-import { parseE0SeedArguments } from './e0-seed-edge-fixtures.mjs'
+import {
+  createE0PersistentContextLauncher,
+  defaultE0PersistentContextLauncher,
+  parseE0SeedArguments,
+} from './e0-seed-edge-fixtures.mjs'
 
 const environment = {
   homeDirectory: 'C:\\Users\\FixtureTester',
@@ -79,4 +84,20 @@ test('parses dry-run and reset without accepting unknown arguments', () => {
   assert.equal(options.profilePath, 'C:\\Temp\\learning-knowledge-base-e0-edge')
   assert.equal(options.url, 'http://localhost:4174')
   assert.throws(() => parseE0SeedArguments(['--unsafe'], environment), /Unknown E0 fixture option/)
+})
+test('wraps the BrowserType launcher so the receiver is preserved', async () => {
+  let receivedReceiver = null
+  const browserType = {
+    async launchPersistentContext(...args) {
+      receivedReceiver = this
+      return { args }
+    },
+  }
+  const launcher = createE0PersistentContextLauncher(browserType)
+  const result = await launcher('C:\\Temp\\learning-knowledge-base-e0-edge', { channel: 'msedge' })
+
+  assert.notEqual(launcher, browserType.launchPersistentContext)
+  assert.equal(receivedReceiver, browserType)
+  assert.deepEqual(result.args, ['C:\\Temp\\learning-knowledge-base-e0-edge', { channel: 'msedge' }])
+  assert.notEqual(defaultE0PersistentContextLauncher, chromium.launchPersistentContext)
 })
