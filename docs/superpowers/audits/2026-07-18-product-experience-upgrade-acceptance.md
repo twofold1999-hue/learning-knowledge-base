@@ -93,19 +93,46 @@
 
 1. 在仓库根目录运行 `npm run build`。
 2. 在第二个终端运行 `npm run e2e:server`，保持 `http://127.0.0.1:4174` 可访问。
-3. 使用独立 Edge profile，而不是日常 profile：
+3. 在第三个终端为独立 Edge profile 写入安全 fixture：
+
+   ```powershell
+   node scripts/e0-seed-edge-fixtures.mjs
+   ```
+
+   脚本只接受 `learning-knowledge-base-e0-edge` 标记的 profile、`http://127.0.0.1:4174`（或 localhost 等价地址），并在应用已初始化当前 schema 后写入稳定 `e0-` 记录。它不会使用 `indexedDB.deleteDatabase()`；重复运行只覆盖相同 fixture。若要先清理旧 fixture 再重建，只使用 `node scripts/e0-seed-edge-fixtures.mjs --reset`，它只删除各表中 `e0-` 主键，保留任何非 `e0-` 记录。
+
+4. 使用独立 Edge profile，而不是日常 profile：
 
    ```powershell
    & "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe" --user-data-dir="$env:TEMP\learning-knowledge-base-e0-edge" http://127.0.0.1:4174
    ```
 
-4. 不要删除或清空日常浏览器的 IndexedDB。该独立 profile 仅用于验收。可在 Edge DevTools 的 Application → IndexedDB 中手动添加与 `tests/e2e/product-experience-upgrade.spec.ts` 同前缀的非敏感 fixture，或在验收前通过本地测试数据/备份导入到这个独立 profile。
-5. 先记录：Windows 版本、Edge 版本、总内存、CPU、GPU、显示缩放、分辨率、电源/节能状态、后台大型程序和测试时间。可使用：
+5. 如果 Edge 安装在 64 位目录，使用：
+
+   ```powershell
+   & "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" --user-data-dir="$env:TEMP\learning-knowledge-base-e0-edge" http://127.0.0.1:4174
+   ```
+
+6. 不要删除或清空日常浏览器的 IndexedDB；脚本和 Edge 都只操作独立 E0 profile。若脚本输出仍显示空数据或拒绝 profile/URL，停止手工验收并保留输出。
+7. 先记录：Windows 版本、Edge 版本、总内存、CPU、GPU、显示缩放、分辨率、电源/节能状态、后台大型程序和测试时间。可使用：
 
    ```powershell
    Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsBuildNumber, CsTotalPhysicalMemory, CsProcessors
    Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion
    ```
+
+### Edge 手工 fixture 准备
+
+`node scripts/e0-seed-edge-fixtures.mjs` 成功后应显示：2022、2024、2026 年笔记；5/50/250 KiB 正文；一门三章节课程；300 个 approved 实体；600 条 approved、5 条 pending/suggested、5 条 rejected 关系。
+
+- 两篇笔记日期：`2026-01-10`
+- 一篇笔记日期：`2026-01-11`
+- 零篇过去日期：`2026-01-12`
+- 深正文搜索词：`E0_DEEP_SEARCH_TOKEN_2026`
+- Wiki：`E0 Wiki Source` → `[[E0 Wiki Target]]`
+- 图谱详情入口：`E0 Graph Entry Entity`
+
+在启动 fixture 脚本前关闭使用同一独立 profile 的 Edge 窗口，避免 Windows profile lock。脚本完成后会关闭其 headless Edge context；再启动上面的可见 Edge 命令。它不会连接真实 AI 服务或外部 CDN。
 
 ### 手工场景清单
 
