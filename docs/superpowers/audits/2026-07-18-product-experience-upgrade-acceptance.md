@@ -16,7 +16,7 @@
 - 自动化环境：Windows、Node `v24.15.0`、Playwright Chromium 隔离 context
 - 构建与服务器：`npm run build` 生成的 `dist`，现有生产 Node 静态服务器 `http://127.0.0.1:4174`
 - 自动化数据库边界：真实 `LearningKnowledgeBase` 当前 schema；由应用先初始化，再在隔离 context 写入 fixture。
-- 真实手工环境：独立 Microsoft Edge Profile `%TEMP%\learning-knowledge-base-e0-edge`，访问本地生产构建 `http://127.0.0.1:4174`。
+- 真实手工环境：独立 Microsoft Edge 测试 Profile，访问本地生产构建 `http://127.0.0.1:4174`。
 
 真实 Edge 验收仅使用稳定 `e0-` fixture，未操作用户真实知识库。fixture 包含 14 篇笔记、2022/2024/2026 三个年份、5/50/250 KiB 长正文、深正文搜索数据、Wiki 前链/反链、1 门课程与 3 个章节、300 个 approved 实体、600 个 approved 关系，以及 suggested 和 rejected 关系。
 
