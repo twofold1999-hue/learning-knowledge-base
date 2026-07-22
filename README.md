@@ -221,10 +221,11 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 ## 项目状态
 
-产品体验升级验收已完成。当前定位是可本地运行、可演示的候选版本；下一阶段聚焦项目展示、发布准备和真实使用验证，而不是继续扩展未验证的新功能。
+产品体验升级验收已完成。当前定位是可本地运行、可演示的 **v0.1.0 候选版本**；下一阶段聚焦真实使用验证，而不是继续扩展未经验证的新功能。发布范围与尚需人工确认的远端操作见 [更新日志](CHANGELOG.md)、[v0.1.0 候选发布说明](docs/releases/v0.1.0.md) 和 [发布检查清单](docs/RELEASE_CHECKLIST.md)。
 
 ## 相关文档
 
 - [开发原则](docs/DEVELOPMENT_PRINCIPLES.md)
 - [知识实体图谱设计](docs/superpowers/specs/2026-07-13-knowledge-entity-graph-design.md)
 - [产品体验升级验收](docs/superpowers/audits/2026-07-18-product-experience-upgrade-acceptance.md)
+- [v0.1.0 候选发布说明](docs/releases/v0.1.0.md)
