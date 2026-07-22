@@ -2,7 +2,7 @@
 
 本项目采用 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的简要格式；版本号遵循语义化版本的发布意图。
 
-## [0.1.0] - 2026-07-18
+## [0.1.0] - 2026-07-22
 
 首个可在本地运行和演示的候选发布版本。
 
@@ -28,6 +28,9 @@
 
 ### 质量
 
-- 328 项 Vitest 测试、26 项 Node 契约测试和 33 项生产 Playwright E2E 已通过；
 - 已记录性能基线，并完成隔离演示数据与真实 Edge 独立 Profile 验收；
 - 已知限制和适用边界见 [README](README.md#已知限制) 与 [v0.1.0 发布说明](docs/releases/v0.1.0.md)。
+- 328 项 Vitest 测试通过；
+- 26 项常规 Node 契约测试通过；
+- 3 项发布版本契约测试通过；
+- 33 项生产 Playwright E2E 通过。
