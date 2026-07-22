@@ -89,3 +89,15 @@ describe('备份 JSON UTF-8 大小限制', () => {
     expect((received as Error).message).not.toContain('秘密正文')
   })
 })
+describe('Backup v5 learningSources compatibility', () => {
+  const source = { id: 'source_1', title: ' 官方文档 ', url: 'https://example.com/docs', platform: ' Docs ', authorOrCourse: ' 团队 ', remark: ' 保留内部\n备注 ', createdAt: now, updatedAt: now }
+  it('accepts absent legacy fields, explicit arrays, and keeps all source fields', () => {
+    const data = parseBackupJson(JSON.stringify({ format: 'learning-knowledge-base', version: 5, data: { notes: [{ id: 'legacy', type: 'knowledge_fragment', title: '旧笔记', content: '00:01:20', mediaUrl: 'https://legacy.example', createdAt: now, updatedAt: now }, { id: 'new', type: 'knowledge_fragment', title: '新笔记', content: '', learningSources: [source, { ...source, id: 'source_2', title: '第二来源', url: 'https://example.com/other' }], createdAt: now, updatedAt: now }], deletedNotes: [], projects: [], courses: [], directories: [], images: [], aiResults: [], knowledgeEntities: [], noteEntityLinks: [], knowledgeRelations: [], knowledgeAuditLogs: [] } }))
+    expect(data.notes[0].learningSources).toBeUndefined()
+    expect(data.notes[0].mediaUrl).toBe('https://legacy.example')
+    expect(data.notes[1].learningSources).toEqual([expect.objectContaining({ title: '官方文档', platform: 'Docs', authorOrCourse: '团队', remark: '保留内部\n备注' }), expect.objectContaining({ id: 'source_2' })])
+  })
+  it('rejects invalid source entries explicitly instead of silently discarding them', () => {
+    expect(() => parseBackupJson(JSON.stringify({ notes: [{ id: 'bad', type: 'knowledge_fragment', title: 'bad', content: '', learningSources: [{ id: 'bad_source', title: 'bad', url: 'file:///private', createdAt: now, updatedAt: now }], createdAt: now, updatedAt: now }] }))).toThrow('http/https')
+  })
+})

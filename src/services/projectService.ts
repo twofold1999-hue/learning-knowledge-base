@@ -1,4 +1,4 @@
-import type { Project, Course } from '../types'
+import type { Project, Course, LearningSource } from '../types'
 import { db, generateId } from './db'
 import { createDeletedNote } from './trashService'
 
@@ -25,7 +25,7 @@ export async function createProject(data: { name: string; description?: string }
   return id
 }
 
-export async function createCourse(data: { name: string; source: string; videoUrl?: string; totalChapters?: number | null }): Promise<string> {
+export async function createCourse(data: { name: string; source: string; videoUrl?: string; learningSources?: LearningSource[]; totalChapters?: number | null }): Promise<string> {
   const name = data.name.trim()
   if (!name) throw new Error('课程名称不能为空')
   const duplicate = (await db.courses.toArray()).some((course) => course.name.toLocaleLowerCase() === name.toLocaleLowerCase())
@@ -35,7 +35,7 @@ export async function createCourse(data: { name: string; source: string; videoUr
   const course: Course = {
     id, name, source: data.source.trim(),
     totalChapters: data.totalChapters && Number.isFinite(data.totalChapters) && data.totalChapters > 0 ? Math.floor(data.totalChapters) : null,
-    videoUrl: data.videoUrl?.trim() || null, directoryId: null, createdAt: now, updatedAt: now,
+    videoUrl: data.videoUrl?.trim() || null, ...(data.learningSources ? { learningSources: data.learningSources } : {}), directoryId: null, createdAt: now, updatedAt: now,
   }
   await db.courses.put(course)
   return id

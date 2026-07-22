@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import type { NoteProjection } from '../types'
 import { getTagColor } from '../utils/tagColors'
 
-export default function NoteCard({ note, onToggleLearned, onPlayVideo, playLabel }: { note: NoteProjection; onToggleLearned?: (note: NoteProjection) => void; onPlayVideo?: (note: NoteProjection) => void; playLabel?: string }) {
+export default function NoteCard({ note, onToggleLearned }: { note: NoteProjection; onToggleLearned?: (note: NoteProjection) => void }) {
   const navigate = useNavigate()
 
   const excerpt = note.contentPreview
@@ -57,15 +57,6 @@ export default function NoteCard({ note, onToggleLearned, onPlayVideo, playLabel
           const c = getTagColor(tag)
           return <span key={tag} style={{ fontSize: '12px', padding: '3px 10px', background: c.bg, color: c.text, borderRadius: '4px' }}>{tag}</span>
         })}
-        {onPlayVideo && note.type === 'course_chapter' && (
-          <button
-            onClick={(event) => { event.stopPropagation(); onPlayVideo(note) }}
-            onKeyDown={(event) => event.stopPropagation()}
-            style={{ marginLeft: 'auto', padding: '4px 8px', borderRadius: '5px', background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: '12px' }}
-          >
-            ▶ {playLabel || '观看并记笔记'}
-          </button>
-        )}
       </div>
     </div>
   )

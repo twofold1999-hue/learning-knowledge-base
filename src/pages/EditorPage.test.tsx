@@ -43,7 +43,6 @@ vi.mock('../components/CodeMirrorEditor', () => ({
 vi.mock('../components/TagInput', () => ({ default: () => null }))
 vi.mock('../components/WeakLinkEditor', () => ({ default: () => null }))
 vi.mock('../components/Outline', () => ({ default: () => null }))
-vi.mock('../components/VideoPanel', () => ({ default: () => null }))
 vi.mock('../components/AIKnowledgeAnalyzer', () => ({ default: () => null }))
 vi.mock('../components/AIHistoryPanel', () => ({ default: () => null }))
 vi.mock('../components/KnowledgeOverviewPanel', () => ({ default: () => null }))
@@ -51,7 +50,6 @@ vi.mock('../services/imageService', () => ({ getImage: vi.fn().mockResolvedValue
 vi.mock('../services/markdownService', () => ({ renderMarkdownPreview: vi.fn().mockReturnValue('') }))
 vi.mock('../services/exportService', () => ({ downloadNotesAsMarkdown: vi.fn() }))
 vi.mock('../services/linkService', () => ({ findBacklinks: vi.fn().mockResolvedValue([]), findForwardlinks: vi.fn().mockResolvedValue([]) }))
-vi.mock('../services/biliStudyBridge', () => ({ formatVideoTimestamp: vi.fn(), isBilibiliVideoUrl: vi.fn(), openBilibiliStudy: vi.fn() }))
 vi.mock('../utils/tagColors', () => ({ getTagColor: vi.fn() }))
 
 import EditorPage from './EditorPage'

@@ -88,7 +88,7 @@ export function createLocalServer({ projectRoot = defaultProjectRoot, host = def
       'Cache-Control': ['index.html', 'sw.js', 'registerSW.js', 'manifest.webmanifest'].includes(basename(target)) ? 'no-cache, no-store, must-revalidate' : 'public, max-age=31536000, immutable',
       'Service-Worker-Allowed': '/', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()', 'Cross-Origin-Opener-Policy': 'same-origin',
-      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; frame-src https://player.bilibili.com https://www.bilibili.com; worker-src 'self' blob:; font-src 'self' data:; manifest-src 'self';",
+      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; frame-src 'self'; worker-src 'self' blob:; font-src 'self' data:; manifest-src 'self';",
     }
     const range = request.headers.range
     if (isMediaRequest && range) {

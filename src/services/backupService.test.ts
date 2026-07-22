@@ -119,3 +119,17 @@ describe('备份 JSON 序列化大小限制', () => {
     }
   })
 })
+
+describe('learning source backup round trip', () => {
+  it('preserves multiple sources in Backup v5', async () => {
+    await db.notes.add({ ...note, learningSources: [
+      { id: 'source_a', title: 'Docs', url: 'https://example.com/docs', platform: 'Web', createdAt: now, updatedAt: now },
+      { id: 'source_b', title: 'Course', url: 'https://example.com/course', authorOrCourse: 'Teacher', remark: 'note', createdAt: now, updatedAt: now },
+    ] })
+    const backup = await createBackup()
+    expect(backup.version).toBe(5)
+    await db.notes.clear()
+    await importBackup(serializeBackup(backup))
+    await expect(db.notes.get(note.id)).resolves.toMatchObject({ learningSources: [expect.objectContaining({ id: 'source_a' }), expect.objectContaining({ id: 'source_b', remark: 'note' })] })
+  })
+})

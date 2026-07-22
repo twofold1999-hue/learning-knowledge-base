@@ -22,12 +22,12 @@ import EditorSidePanel, { type EditorAssistantTab, type EditorAssistantTabDefini
 import TagInput from '../components/TagInput'
 import WeakLinkEditor from '../components/WeakLinkEditor'
 import Outline from '../components/Outline'
-import VideoPanel from '../components/VideoPanel'
 import AINoteOrganizer from '../components/AINoteOrganizer'
 import AIKnowledgeAnalyzer from '../components/AIKnowledgeAnalyzer'
 import AIHistoryPanel from '../components/AIHistoryPanel'
 import KnowledgeOverviewPanel from '../components/KnowledgeOverviewPanel'
-import { formatVideoTimestamp, isBilibiliVideoUrl, openBilibiliStudy } from '../services/biliStudyBridge'
+import LearningSourcesPanel from '../components/LearningSourcesPanel'
+import { getLearningSources } from '../services/learningSources'
 import { getTagColor } from '../utils/tagColors'
 import type { Note, NoteProjection, NoteType, NoteUpdate } from '../types'
 
@@ -52,6 +52,7 @@ const EDITOR_ASSISTANT_TABS: readonly EditorAssistantTabDefinition[] = [
   { id: 'outline', label: '目录' },
   { id: 'links', label: '链接' },
   { id: 'ai', label: 'AI整理' },
+  { id: 'sources', label: '来源' },
 ]
 
 function readEditorWidthMode(): EditorWidthMode {
@@ -80,7 +81,6 @@ export default function EditorPage() {
   const initialProjectId = searchParams.get('projectId')
   const initialCourseId = searchParams.get('courseId')
   const isSidePanel = searchParams.get('sidepanel') === '1'
-  const bridgeToken = searchParams.get('bridge')
 
   const currentNote = useNoteStore((s) => s.currentNote)
   const isLoading = useNoteStore((s) => s.isLoading)
@@ -105,13 +105,9 @@ export default function EditorPage() {
   const [courseId, setCourseId] = useState<string | null>(null)
   const [chapterOrder, setChapterOrder] = useState<number | null>(null)
   const [sourceLocation, setSourceLocation] = useState<string | null>(null)
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
-  const [videoTimestamp, setVideoTimestamp] = useState<string | null>(null)
   const [showTypeDialog, setShowTypeDialog] = useState(isNew && !initialType)
   const [createError, setCreateError] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
-  const [showVideoPanel, setShowVideoPanel] = useState(false)
-  const [biliStudyMessage, setBiliStudyMessage] = useState('')
   const [renderHtml, setRenderHtml] = useState('')
   const [backlinks, setBacklinks] = useState<NoteProjection[]>([])
   const [forwardlinks, setForwardlinks] = useState<{ title: string; noteId: string | null }[]>([])
@@ -169,7 +165,6 @@ export default function EditorPage() {
   const titleToId = useMemo(() => new Map(allNotes.map((n) => [n.title, n.id])), [allNotes])
   const noteLinkIndex = useMemo(() => createNoteLinkIndex(allNotes), [allNotes])
   const activeCourse = useMemo(() => courses.find((course) => course.id === courseId), [courses, courseId])
-  const effectiveMediaUrl = mediaUrl || activeCourse?.videoUrl || null
 
   const handleSelectType = useCallback(async (type: NoteType) => {
     setShowTypeDialog(false)
@@ -237,11 +232,9 @@ export default function EditorPage() {
       courseId,
       chapterOrder,
       sourceLocation,
-      mediaUrl,
-      videoTimestamp,
     })
     void flushPendingSave(targetNoteId).catch(() => undefined)
-  }, [chapterOrder, concepts, courseId, directoryId, flushPendingSave, getCurrentContent, mediaUrl, projectId, sourceLocation, tags, title, triggerSave, videoTimestamp])
+  }, [chapterOrder, concepts, courseId, directoryId, flushPendingSave, getCurrentContent, projectId, sourceLocation, tags, title, triggerSave])
 
   const visibleSavePhase: EditorSavePhase = editorSaveState.noteId === currentNote?.id
     ? editorSaveState.phase
@@ -288,34 +281,6 @@ export default function EditorPage() {
       lastLinkQueryRef.current = plan.nextState
     }, 250)
   }, [noteLinkIndex])
-  const appendVideoAnnotation = useCallback((rawStartSeconds: number, rawEndSeconds: number, rawAnnotation: string) => {
-    const startSeconds = Math.max(0, Math.floor(rawStartSeconds))
-    const endSeconds = Math.max(startSeconds, Math.floor(rawEndSeconds))
-    const startTimestamp = formatVideoTimestamp(startSeconds)
-    const endTimestamp = formatVideoTimestamp(endSeconds)
-    const range = startSeconds === endSeconds ? startTimestamp : `${startTimestamp}–${endTimestamp}`
-    const annotation = rawAnnotation.replace(/[\r\n]+/g, ' ').trim().slice(0, 240)
-    let timestampMarkdown = range
-    if (effectiveMediaUrl) {
-      try {
-        const videoUrl = new URL(effectiveMediaUrl, window.location.origin)
-        if (isBilibiliVideoUrl(effectiveMediaUrl)) videoUrl.searchParams.set('t', String(startSeconds))
-        else videoUrl.hash = `t=${startSeconds}`
-        timestampMarkdown = `[${range}](${videoUrl.toString()})`
-      } catch {
-        // A plain timestamp is still useful if the source URL is malformed.
-      }
-    }
-    const entry = `- 🎬 ${timestampMarkdown}${annotation ? `｜${annotation}` : ''}`
-    const currentContent = getCurrentContent()
-    const nextContent = `${currentContent.trimEnd()}${currentContent.trim() ? '\n\n' : ''}${entry}\n`
-    replaceDraftContent(nextContent)
-    scheduleLinkLookup(nextContent)
-    setIsEditMode(true)
-    setVideoTimestamp(endTimestamp)
-    triggerSave({ content: nextContent, videoTimestamp: endTimestamp })
-    setBiliStudyMessage(`已插入正文：${range}；续播进度已保存到 ${endTimestamp}`)
-  }, [effectiveMediaUrl, getCurrentContent, replaceDraftContent, scheduleLinkLookup, triggerSave])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -347,40 +312,12 @@ export default function EditorPage() {
       setCourseId(currentNote.courseId)
       setChapterOrder(currentNote.chapterOrder)
       setSourceLocation(currentNote.sourceLocation)
-      setMediaUrl(currentNote.mediaUrl)
-      setVideoTimestamp(currentNote.videoTimestamp)
       setIsEditMode(!currentNote.content)
       saveRevisionRef.current.set(currentNote.id, 0)
       setEditorSaveState({ noteId: currentNote.id, phase: 'saved' })
       noteLoaded.current = true
     }
   }, [currentNote, replaceDraftContent])
-
-  useEffect(() => {
-    setShowVideoPanel(searchParams.get('video') === '1')
-  }, [searchParams])
-
-  useEffect(() => {
-    if (!bridgeToken || window.parent === window) return
-    const handleTimestamp = (event: MessageEvent) => {
-      if (event.source !== window.parent) return
-      const data = event.data as { type?: string; bridgeToken?: string; seconds?: number; startSeconds?: number; endSeconds?: number; annotation?: string } | null
-      if (data?.bridgeToken !== bridgeToken) return
-      if (data.type === 'knowledge-base:save-video-progress' && Number.isFinite(data.seconds)) {
-        const timestamp = formatVideoTimestamp(Math.max(0, Math.floor(data.seconds!)))
-        setVideoTimestamp(timestamp)
-        triggerSave({ videoTimestamp: timestamp })
-        setBiliStudyMessage(`续播进度已保存到 ${timestamp}`)
-        return
-      }
-      if (data.type !== 'knowledge-base:insert-video-note') return
-      if (!Number.isFinite(data.startSeconds) || !Number.isFinite(data.endSeconds)) return
-
-      appendVideoAnnotation(data.startSeconds!, data.endSeconds!, data.annotation || '')
-    }
-    window.addEventListener('message', handleTimestamp)
-    return () => window.removeEventListener('message', handleTimestamp)
-  }, [appendVideoAnnotation, bridgeToken])
 
   useEffect(() => {
     if (isEditMode) return
@@ -436,13 +373,13 @@ export default function EditorPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        triggerSave({ title, content: getCurrentContent(), tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
+        triggerSave({ title, content: getCurrentContent(), tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation })
         void flushPendingSave().catch(() => undefined)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [title, tags, concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp, triggerSave, flushPendingSave, getCurrentContent])
+  }, [title, tags, concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, triggerSave, flushPendingSave, getCurrentContent])
 
   const handleDelete = async () => {
     const noteIdToDelete = actualNoteId.current
@@ -467,21 +404,11 @@ export default function EditorPage() {
       await flushPendingSave()
       await downloadNotesAsMarkdown([{
         ...currentNote, title, content: contentToExport, tags, relatedConcepts: concepts,
-        directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp,
+        directoryId, projectId, courseId, chapterOrder, sourceLocation,
       }])
     } catch (error) {
       alert(error instanceof Error ? `导出失败：${error.message}` : '导出失败')
     }
-  }
-
-  const handleStartBilibiliStudy = async (targetVideoUrl = effectiveMediaUrl, preferPictureInPicture = false) => {
-    const targetNoteId = actualNoteId.current
-    if (!targetNoteId || !targetVideoUrl || !isBilibiliVideoUrl(targetVideoUrl)) return
-    setBiliStudyMessage(preferPictureInPicture ? '正在准备 B 站高清悬浮学习…' : '正在打开 B 站学习窗口…')
-    const opened = await openBilibiliStudy(targetNoteId, targetVideoUrl, { preferPictureInPicture })
-    setBiliStudyMessage(opened
-      ? preferPictureInPicture ? '已打开 B 站。请在视频页点击一次「进入画中画」，随后会自动回到本笔记。' : '已打开 B 站；右侧边栏会显示当前章节笔记。'
-      : '未检测到学习扩展。请先按 browser-extension/README.md 安装扩展。')
   }
 
   const overviewPanel = useMemo(() => currentNote ? (
@@ -512,6 +439,12 @@ export default function EditorPage() {
     </>
   ) : null, [currentNote?.id, flushPendingSave, getCurrentContent, handleAIHistoryChanged, handleAIResultApplied, handleKnowledgeOverviewChanged])
 
+  const sourcesPanel = useMemo(() => currentNote ? (
+    <LearningSourcesPanel
+      sources={getLearningSources(currentNote, activeCourse?.videoUrl)}
+      onSave={async (learningSources) => { await updateNote(currentNote.id, { learningSources }) }}
+    />
+  ) : null, [activeCourse?.videoUrl, currentNote, updateNote])
   const linksPanel = useMemo(() => (
     <>
       <section className="editor-assistant-panel__section" data-editor-assistant-links>
@@ -647,7 +580,7 @@ export default function EditorPage() {
                 if (isEditMode) {
                   const draftContent = getCurrentContent()
                   replaceDraftContent(draftContent)
-                  triggerSave({ title, content: draftContent, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
+                  triggerSave({ title, content: draftContent, tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation })
                   void flushPendingSave().catch(() => undefined)
                 }
                 setIsEditMode(!isEditMode)
@@ -687,11 +620,6 @@ export default function EditorPage() {
             <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 500, background: 'rgba(187,154,247,0.12)', color: 'var(--purple)' }}>
               📁 {directories.find((d) => d.id === directoryId)?.name}
             </span>
-          )}
-          {currentNote.type === 'course_chapter' && (
-            <button onClick={() => setShowVideoPanel(!showVideoPanel)} style={{ marginLeft: 'auto', padding: '4px 8px', borderRadius: '5px', fontSize: '12px', color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid var(--accent-soft)' }}>
-              {showVideoPanel ? '收起学习媒体' : '▷ 学习媒体'}
-            </button>
           )}
         </div>
       )}
@@ -771,35 +699,8 @@ export default function EditorPage() {
                 style={{ display: 'block', width: '100%', marginTop: '6px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', padding: '6px 10px', color: 'var(--ink)' }}
               />
             </label>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--faint)' }}>
-              视频时间点
-              <input
-                value={videoTimestamp || ''}
-                onChange={(event) => { const value = event.target.value || null; setVideoTimestamp(value); triggerSave({ videoTimestamp: value }) }}
-                placeholder="如 12:34"
-                style={{ display: 'block', width: '100%', marginTop: '6px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '6px', padding: '6px 10px', color: 'var(--ink)' }}
-              />
-            </label>
           </div>
-          <button onClick={() => setShowVideoPanel(!showVideoPanel)} style={{ marginBottom: '16px', padding: '5px 9px', borderRadius: '6px', background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: '12px' }}>
-            {showVideoPanel ? '收起学习媒体' : effectiveMediaUrl ? '▷ 打开学习媒体' : '+ 为本章节添加媒体'}
-          </button>
         </>
-      )}
-
-      {biliStudyMessage && <div role="status" style={{ margin: '0 0 12px', color: biliStudyMessage.startsWith('未检测') ? 'var(--red)' : 'var(--muted)', fontSize: '12px' }}>{biliStudyMessage}</div>}
-
-      {currentNote?.type === 'course_chapter' && showVideoPanel && (
-        <VideoPanel
-          videoUrl={mediaUrl}
-          inheritedVideoUrl={activeCourse?.videoUrl}
-          initialTimestamp={videoTimestamp}
-          onTimestampChange={(timestamp) => { setVideoTimestamp(timestamp); triggerSave({ videoTimestamp: timestamp }) }}
-          onVideoUrlChange={(url) => { setMediaUrl(url); triggerSave({ mediaUrl: url }) }}
-          onAnnotation={({ startSeconds, endSeconds, annotation }) => appendVideoAnnotation(startSeconds, endSeconds, annotation)}
-          onOpenBilibiliPictureInPicture={(url) => { void handleStartBilibiliStudy(url, true) }}
-          onOpenBilibiliAssist={(url) => { void handleStartBilibiliStudy(url) }}
-        />
       )}
 
       <div style={{ marginBottom: '16px' }}>
@@ -825,7 +726,7 @@ export default function EditorPage() {
             value={content}
             onChange={(val) => { contentRef.current = val; triggerSave({ content: val }); scheduleLinkLookup(val) }}
             onSave={() => {
-              triggerSave({ title, content: getCurrentContent(), tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation, mediaUrl, videoTimestamp })
+              triggerSave({ title, content: getCurrentContent(), tags, relatedConcepts: concepts, directoryId, projectId, courseId, chapterOrder, sourceLocation })
               void flushPendingSave().catch(() => undefined)
             }}
           />
@@ -869,6 +770,9 @@ export default function EditorPage() {
         </section>
         <section id="editor-assistant-panel-ai" role="tabpanel" aria-labelledby="editor-assistant-tab-ai" data-editor-assistant-tab-panel="ai" hidden={assistantTab !== 'ai'}>
           {aiPanel}
+        </section>
+        <section id="editor-assistant-panel-sources" role="tabpanel" aria-labelledby="editor-assistant-tab-sources" data-editor-assistant-tab-panel="sources" hidden={assistantTab !== 'sources'}>
+          {sourcesPanel}
         </section>
       </EditorSidePanel>
       </div>

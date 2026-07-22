@@ -1,5 +1,17 @@
 export type NoteType = 'knowledge_fragment' | 'course_chapter'
 
+/** A user-managed, externally opened learning reference. */
+export interface LearningSource {
+  id: string
+  title: string
+  url: string
+  platform?: string
+  authorOrCourse?: string
+  remark?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Note {
   id: string
   type: NoteType
@@ -15,6 +27,7 @@ export interface Note {
   /** Optional media source for this learning unit. It overrides the course default. */
   mediaUrl: string | null
   videoTimestamp: string | null
+  learningSources?: LearningSource[]
   createdAt: string
   updatedAt: string
 }
@@ -76,6 +89,7 @@ export interface Course {
   source: string
   totalChapters: number | null
   videoUrl: string | null
+  learningSources?: LearningSource[]
   directoryId: string | null
   createdAt: string
   updatedAt: string

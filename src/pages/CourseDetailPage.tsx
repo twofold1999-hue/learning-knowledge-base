@@ -21,6 +21,8 @@ import SortableNoteCard from '../components/SortableNoteCard'
 import NoteCard from '../components/NoteCard'
 import { setLearnedContent } from '../utils/noteUtils'
 import { fetchNote as fetchFullNote } from '../services/noteService'
+import LearningSourcesPanel from '../components/LearningSourcesPanel'
+import { getLearningSources } from '../services/learningSources'
 
 export default function CourseDetailPage() {
   const { courseId } = useParams()
@@ -36,7 +38,6 @@ export default function CourseDetailPage() {
   const [dragEnabled, setDragEnabled] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [courseSource, setCourseSource] = useState('')
-  const [courseVideoUrl, setCourseVideoUrl] = useState('')
   const [courseTotalChapters, setCourseTotalChapters] = useState('')
   const [courseSaveError, setCourseSaveError] = useState('')
 
@@ -54,7 +55,6 @@ export default function CourseDetailPage() {
   useEffect(() => {
     if (!course) return
     setCourseSource(course.source)
-    setCourseVideoUrl(course.videoUrl || '')
     setCourseTotalChapters(course.totalChapters ? String(course.totalChapters) : '')
   }, [course])
 
@@ -94,7 +94,6 @@ export default function CourseDetailPage() {
       setCourseSaveError('')
       await updateCourse(courseId, {
         source: courseSource.trim(),
-        videoUrl: courseVideoUrl.trim() || null,
         totalChapters,
       })
       setSettingsOpen(false)
@@ -112,10 +111,6 @@ export default function CourseDetailPage() {
       console.error('更新章节学习状态失败：', error)
       setSortedNotes(notes)
     }
-  }
-
-  const handlePlayChapter = (chapter: typeof sortedNotes[number]) => {
-    navigate(`/editor/${encodeURIComponent(chapter.id)}?video=1`)
   }
 
   const learnedCount = sortedNotes.filter((note) => note.isLearned).length
@@ -154,14 +149,10 @@ export default function CourseDetailPage() {
             <label style={{ color: 'var(--muted)', fontSize: '12px' }}>学习来源
               <input value={courseSource} onChange={(event) => setCourseSource(event.target.value)} placeholder="如 B站课程 / 一本书 / 题库 / 字帖" style={{ display: 'block', boxSizing: 'border-box', width: '100%', marginTop: '5px', padding: '7px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--ink)' }} />
             </label>
-            <label style={{ color: 'var(--muted)', fontSize: '12px' }}>视频地址
-              <input value={courseVideoUrl} onChange={(event) => setCourseVideoUrl(event.target.value)} placeholder="B站链接、https 直链或 /media/视频.mp4" style={{ display: 'block', boxSizing: 'border-box', width: '100%', marginTop: '5px', padding: '7px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--ink)' }} />
-            </label>
             <label style={{ color: 'var(--muted)', fontSize: '12px' }}>总章节数
               <input type="number" min="1" value={courseTotalChapters} onChange={(event) => setCourseTotalChapters(event.target.value)} placeholder="可选" style={{ display: 'block', boxSizing: 'border-box', width: '100%', marginTop: '5px', padding: '7px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--ink)' }} />
             </label>
           </div>
-          <p style={{ margin: '10px 0 0', color: 'var(--faint)', fontSize: '12px', lineHeight: 1.5 }}>本地视频请放入项目的 <code>media</code> 文件夹，并填写类似 <code>/media/课程.mp4</code> 的地址。</p>
           {courseSaveError && <div role="alert" style={{ marginTop: '10px', color: 'var(--red)', fontSize: '12px' }}>{courseSaveError}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
             <button onClick={() => setSettingsOpen(false)} style={{ padding: '6px 10px', borderRadius: '6px', color: 'var(--muted)' }}>取消</button>
@@ -178,7 +169,7 @@ export default function CourseDetailPage() {
           <div style={{ height: '8px', background: 'var(--surface-2)', borderRadius: '4px', overflow: 'hidden' }}><div style={{ width: `${progress}%`, height: '100%', background: 'var(--green)', transition: 'width .2s' }} /></div>
         </div>
       )}
-      {notes.length > 0 && <p style={{ margin: '0 0 12px', color: 'var(--faint)', fontSize: '12px' }}>从任一章节进入「学习媒体」，可使用计划默认视频，也可为该章节单独选择 B 站、本地媒体库或视频直链；续播点会保存到该章节。</p>}
+      {course && <div style={{ marginBottom: '20px' }}><LearningSourcesPanel sources={getLearningSources(course)} onSave={async (learningSources) => { await updateCourse(course.id, { learningSources }) }} /></div>}
       {dragEnabled ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={sortedNotes.map((n) => n.id)} strategy={verticalListSortingStrategy}>
@@ -188,7 +179,7 @@ export default function CourseDetailPage() {
           </SortableContext>
         </DndContext>
       ) : (
-        sortedNotes.map((note) => <NoteCard key={note.id} note={note} onToggleLearned={handleToggleLearned} onPlayVideo={handlePlayChapter} playLabel="学习媒体" />)
+        sortedNotes.map((note) => <NoteCard key={note.id} note={note} onToggleLearned={handleToggleLearned} />)
       )}
       {notes.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--faint)', fontSize: '14px' }}>还没有章节</div>}
     </div>

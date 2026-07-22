@@ -28,7 +28,7 @@ function collectPageErrors(page) {
 test('production app shell loads without uncaught errors', async ({ page }) => {
   const errors = collectPageErrors(page)
   await page.goto('/')
-  await expect(page).toHaveTitle('外接知识库')
+  await expect(page).toHaveTitle('学习知识库')
   await expect(page.getByRole('heading', { name: /把输入/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /开始记录/ })).toBeVisible()
   expect(errors).toEqual([])

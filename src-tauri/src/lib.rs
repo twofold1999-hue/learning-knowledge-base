@@ -1,11 +1,13 @@
 mod app_paths;
 mod desktop_baseline;
+mod external_source_opener;
 
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             desktop_baseline::focus_existing_main_window(app);
         }))
@@ -24,7 +26,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            desktop_baseline::desktop_baseline_status
+            desktop_baseline::desktop_baseline_status,
+            external_source_opener::open_external_learning_source
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

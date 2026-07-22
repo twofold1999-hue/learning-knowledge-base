@@ -65,10 +65,9 @@ export default function Sidebar() {
     const name = prompt('学习计划名称')?.trim()
     if (!name) return
     const source = prompt('来源（可选，如 B站课程 / 一本书 / 题库 / 字帖）')?.trim() || ''
-    const videoUrl = prompt('视频地址（可选，支持 B 站链接或直接视频地址）')?.trim() || ''
     const totalInput = prompt('计划单元数（可选）')?.trim() || ''
     const totalChapters = totalInput ? Number(totalInput) : null
-    try { await createCourse({ name, source, videoUrl, totalChapters }) }
+    try { await createCourse({ name, source, totalChapters }) }
     catch (error) { alert(error instanceof Error ? error.message : '创建课程失败') }
   }
 

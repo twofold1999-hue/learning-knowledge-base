@@ -114,7 +114,7 @@ export default function HomePage() {
             <div style={{ color: 'var(--faint)', fontSize: '12px', fontWeight: 650, letterSpacing: '.04em' }}>继续学习</div>
             {latestChapter ? <>
               <div style={{ marginTop: '10px', color: 'var(--ink)', fontSize: '16px', fontWeight: 650, lineHeight: 1.45 }}>{latestChapter.title || '未命名章节'}</div>
-              <div style={{ marginTop: '5px', color: 'var(--muted)', fontSize: '13px' }}>{latestCourse?.name || '学习单元'}{latestChapter.videoTimestamp ? ` · 上次看到 ${latestChapter.videoTimestamp}` : ''}</div>
+              <div style={{ marginTop: '5px', color: 'var(--muted)', fontSize: '13px' }}>{latestCourse?.name || '学习单元'}</div>
               <button onClick={() => navigate(`/editor/${encodeURIComponent(latestChapter.id)}`)} style={{ marginTop: '4px', padding: '8px 11px', background: 'var(--accent)', color: '#fff', borderRadius: '7px', fontSize: '13px', fontWeight: 600, textAlign: 'left' }}>继续本章节 →</button>
             </> : <>
               <div style={{ marginTop: '10px', color: 'var(--muted)', fontSize: '13px', lineHeight: 1.6 }}>还没有学习单元。新建学习计划后，可以关联视频、阅读进度和时间片段。</div>

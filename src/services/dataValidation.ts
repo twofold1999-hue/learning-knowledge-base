@@ -1,4 +1,5 @@
 import type { AIResult, Course, DeletedNote, Directory, ImageRecord, KnowledgeEntity, KnowledgeRelation, KnowledgeAuditLog, Note, NoteEntityLink, Project, TrashReason } from '../types'
+import { normalizePersistedLearningSources } from './learningSources'
 
 const MAX_TITLE_LENGTH = 10_000
 const MAX_CONTENT_LENGTH = 5_000_000
@@ -129,6 +130,7 @@ export function normalizeNoteRecord(value: unknown, index = 0): Note {
   }
   const now = new Date().toISOString()
   const createdAt = isoDate(record.createdAt, `notes[${index}].createdAt`, now)
+  const learningSources = normalizePersistedLearningSources(record.learningSources, `notes[${index}].learningSources`)
   return {
     id: requiredString(record.id, `notes[${index}].id`, MAX_TITLE_LENGTH),
     type,
@@ -143,6 +145,7 @@ export function normalizeNoteRecord(value: unknown, index = 0): Note {
     sourceLocation: nullableString(record.sourceLocation, `notes[${index}].sourceLocation`),
     mediaUrl: nullableString(record.mediaUrl, `notes[${index}].mediaUrl`),
     videoTimestamp: nullableString(record.videoTimestamp, `notes[${index}].videoTimestamp`),
+    ...(learningSources === undefined ? {} : { learningSources }),
     createdAt,
     updatedAt: isoDate(record.updatedAt, `notes[${index}].updatedAt`, createdAt),
   }
@@ -180,12 +183,14 @@ export function normalizeCourseRecord(value: unknown, index = 0): Course {
   const record = asRecord(value, `courses[${index}]`)
   const now = new Date().toISOString()
   const createdAt = isoDate(record.createdAt, `courses[${index}].createdAt`, now)
+  const learningSources = normalizePersistedLearningSources(record.learningSources, `courses[${index}].learningSources`)
   return {
     id: requiredString(record.id, `courses[${index}].id`, MAX_TITLE_LENGTH),
     name: requiredString(record.name, `courses[${index}].name`, MAX_TITLE_LENGTH),
     source: optionalString(record.source, `courses[${index}].source`, '', MAX_TITLE_LENGTH),
     totalChapters: nullablePositiveNumber(record.totalChapters, `courses[${index}].totalChapters`),
     videoUrl: nullableString(record.videoUrl, `courses[${index}].videoUrl`),
+    ...(learningSources === undefined ? {} : { learningSources }),
     directoryId: nullableString(record.directoryId, `courses[${index}].directoryId`),
     createdAt,
     updatedAt: isoDate(record.updatedAt, `courses[${index}].updatedAt`, createdAt),

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-export type EditorAssistantTab = 'overview' | 'history' | 'outline' | 'links' | 'ai'
+export type EditorAssistantTab = 'overview' | 'history' | 'outline' | 'links' | 'ai' | 'sources'
 
 export interface EditorAssistantTabDefinition {
   id: EditorAssistantTab

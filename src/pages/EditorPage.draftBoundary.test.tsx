@@ -56,12 +56,10 @@ vi.mock('../components/KnowledgeOverviewPanel', () => ({ default: () => { mocks.
 vi.mock('../components/TagInput', () => ({ default: () => null }))
 vi.mock('../components/WeakLinkEditor', () => ({ default: () => null }))
 vi.mock('../components/Outline', () => ({ default: () => null }))
-vi.mock('../components/VideoPanel', () => ({ default: () => null }))
 vi.mock('../services/imageService', () => ({ getImage: vi.fn().mockResolvedValue(null) }))
 vi.mock('../services/markdownService', () => ({ renderMarkdownPreview: mocks.renderMarkdownPreview }))
 vi.mock('../services/exportService', () => ({ downloadNotesAsMarkdown: vi.fn() }))
 
-vi.mock('../services/biliStudyBridge', () => ({ formatVideoTimestamp: vi.fn(), isBilibiliVideoUrl: vi.fn(), openBilibiliStudy: vi.fn() }))
 vi.mock('../utils/tagColors', () => ({ getTagColor: vi.fn() }))
 
 import EditorPage from './EditorPage'

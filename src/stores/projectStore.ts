@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Project, Course } from '../types'
+import type { Project, Course, LearningSource } from '../types'
 import * as projectService from '../services/projectService'
 import { useNoteStore } from './noteStore'
 import { scheduleLocalBackup } from '../services/localBackupService'
@@ -10,8 +10,8 @@ interface ProjectState {
   fetchProjects: () => Promise<void>
   fetchCourses: () => Promise<void>
   createProject: (data: { name: string; description?: string }) => Promise<string>
-  createCourse: (data: { name: string; source: string; videoUrl?: string; totalChapters?: number | null }) => Promise<string>
-  updateCourse: (courseId: string, data: Partial<Pick<Course, 'source' | 'totalChapters' | 'videoUrl'>>) => Promise<void>
+  createCourse: (data: { name: string; source: string; videoUrl?: string; learningSources?: LearningSource[]; totalChapters?: number | null }) => Promise<string>
+  updateCourse: (courseId: string, data: Partial<Pick<Course, 'source' | 'totalChapters' | 'videoUrl' | 'learningSources'>>) => Promise<void>
   deleteProject: (projectId: string) => Promise<void>
   deleteCourse: (courseId: string) => Promise<void>
 }

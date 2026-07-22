@@ -37,7 +37,6 @@ vi.mock('../components/CodeMirrorEditor', () => ({
 vi.mock('../components/TagInput', () => ({ default: () => <div>标签编辑器</div> }))
 vi.mock('../components/WeakLinkEditor', () => ({ default: () => null }))
 vi.mock('../components/Outline', () => ({ default: () => null }))
-vi.mock('../components/VideoPanel', () => ({ default: () => null }))
 vi.mock('../components/AINoteOrganizer', () => ({ default: () => <div>AI 整理</div> }))
 vi.mock('../components/AIKnowledgeAnalyzer', () => ({ default: () => <div>AI 知识分析</div> }))
 vi.mock('../components/AIHistoryPanel', () => ({ default: () => <div>AI 历史</div> }))
@@ -45,7 +44,6 @@ vi.mock('../components/KnowledgeOverviewPanel', () => ({ default: () => <div>知
 vi.mock('../services/imageService', () => ({ getImage: vi.fn().mockResolvedValue(null) }))
 vi.mock('../services/markdownService', () => ({ renderMarkdownPreview: vi.fn().mockResolvedValue('') }))
 vi.mock('../services/exportService', () => ({ downloadNotesAsMarkdown: vi.fn() }))
-vi.mock('../services/biliStudyBridge', () => ({ formatVideoTimestamp: vi.fn(), isBilibiliVideoUrl: vi.fn(), openBilibiliStudy: vi.fn() }))
 vi.mock('../utils/tagColors', () => ({ getTagColor: vi.fn() }))
 
 import EditorPage from './EditorPage'
