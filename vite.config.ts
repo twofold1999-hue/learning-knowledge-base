@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon-192.png', 'icon-512.png'],
       manifest: {
-        name: '外部知识库',
-        short_name: '知识库',
-        description: '个人外部知识库 - 笔记管理与学习记录',
+        name: '学习知识库',
+        short_name: '学习知识库',
+        description: '本地优先的个人学习知识库 - 笔记管理与学习记录',
         lang: 'zh-CN',
         theme_color: '#1a1b26',
         background_color: '#1a1b26',

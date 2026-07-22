@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "外部知识库",
-  "version": "0.0.0",
+  "productName": "学习知识库",
+  "version": "0.2.0",
   "identifier": "com.learningknowledgebase.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -12,7 +12,8 @@
   "app": {
     "windows": [
       {
-        "title": "外部知识库",
+        "label": "main",
+        "title": "学习知识库",
         "width": 1280,
         "height": 820,
         "minWidth": 960,
