@@ -26,7 +26,11 @@ test('v0.1.0 release documents identify the candidate version', async () => {
     readText('README.md'),
   ])
 
-  assert.match(changelog, /^## \[0\.1\.0\] - 2026-07-18$/m)
+  assert.match(
+    changelog,
+    /^## \[0\.1\.0\] - \d{4}-\d{2}-\d{2}$/m,
+  )
+  assert.match(changelog, /^## \[0\.1\.0\] - 2026-07-22$/m)
   assert.match(releaseNotes, /^# Learning Knowledge Base v0\.1\.0 候选发布说明$/m)
   assert.doesNotMatch(readme, /Task 21-B|截图待补|TODO/i)
 })
