@@ -3,12 +3,14 @@ import { useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { useUiStore } from '../stores/uiStore'
+import { useDesktopWorkspaceActions } from '../runtime/desktopWorkspaceContext'
 
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen)
+  const desktop = useDesktopWorkspaceActions()
   useEffect(() => {
     if (window.matchMedia('(max-width: 768px)').matches) setSidebarOpen(false)
   }, [setSidebarOpen])
@@ -20,6 +22,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       {sidebarOpen && <button className="mobile-overlay" aria-label="关闭侧栏" onClick={toggleSidebar} />}
       {sidebarOpen && <Sidebar />}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {desktop.isDesktop && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '8px 24px 0' }}><button type="button" onClick={desktop.returnToControlCenter}>返回控制中心</button><button type="button" onClick={desktop.requestSafeExit}>安全退出</button></div>}
         <TopBar />
         <main className="app-main" style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
           <div key={location.pathname} className="page-transition">{children}</div>

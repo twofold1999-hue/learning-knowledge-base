@@ -5,7 +5,7 @@ import { useDirectoryStore } from '../stores/directoryStore'
 import { useProjectStore } from '../stores/projectStore'
 import { getImage } from '../services/imageService'
 import { renderMarkdownPreview } from '../services/markdownService'
-import { trackPendingSave } from '../services/saveCoordinator'
+import { registerSaveFlusher, trackPendingSave } from '../services/saveCoordinator'
 import { createEditorSaveCoordinator } from '../services/editorSaveCoordinator'
 import { downloadNotesAsMarkdown } from '../services/exportService'
 import {
@@ -197,6 +197,10 @@ export default function EditorPage() {
     await editorSaveCoordinator.current?.flush(targetNoteId)
   }, [])
 
+  useEffect(() => registerSaveFlusher('editor-page', async () => {
+    const noteIds = editorSaveCoordinator.current?.trackedNoteIds() ?? []
+    await Promise.all(noteIds.map((targetNoteId) => flushPendingSave(targetNoteId)))
+  }), [flushPendingSave])
   const triggerSave = useCallback((changes: NoteUpdate) => {
     const noteIdToSave = actualNoteId.current
     if (!noteIdToSave) return
