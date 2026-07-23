@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } 
 import { desktopLifecycleBridge, type DesktopLifecycleStatus } from '../runtime/desktopLifecycleBridge'
 import { initialDesktopLifecycleState, reduceDesktopLifecycle } from '../runtime/desktopLifecycle'
 import { DesktopWorkspaceContext } from '../runtime/desktopWorkspaceContext'
+import DesktopAISettingsPanel from './DesktopAISettingsPanel'
 import { flushAllPendingSaves } from '../services/saveCoordinator'
 import { initializeWorkspace } from '../services/workspaceInitializer'
 
@@ -27,6 +28,7 @@ export default function DesktopLifecycleShell({ children }: { children: ReactNod
   const [state, dispatch] = useReducer(reduceDesktopLifecycle, initialDesktopLifecycleState)
   const [closeFailure, setCloseFailure] = useState(false)
   const [forceConfirm, setForceConfirm] = useState(false)
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false)
   const closingRef = useRef(false)
 
   const beginClose = useCallback(async (reason: 'return_to_control_center' | 'safe_exit' | 'window_close') => {
@@ -136,11 +138,12 @@ export default function DesktopLifecycleShell({ children }: { children: ReactNod
           <p>状态：就绪{state.directoriesReady ? '' : '（数据目录尚未准备完成）'}</p>
           <button type="button" onClick={() => { void openWorkspace() }}>启动并进入知识库</button>
           <button type="button" onClick={exit}>退出程序</button>
-          <p><button disabled>配置 AI（后续版本提供）</button> <button disabled>导入浏览器版 Backup（后续版本提供）</button></p>
+          <p><button type="button" onClick={() => setAiSettingsOpen(true)}>配置 AI</button> <button disabled>导入浏览器版 Backup（后续版本提供）</button></p>
           <p><button disabled>打开备份目录（后续版本提供）</button> <button disabled>查看日志（后续版本提供）</button></p>
         </>}
         {state.phase === 'opening_workspace' && <p>正在进入知识库…</p>}
         {state.phase === 'closing' && <p>正在完成保存…</p>}
+        {aiSettingsOpen && <DesktopAISettingsPanel onClose={() => setAiSettingsOpen(false)} />}
         {state.phase === 'error' && <>
           <p role="alert">{state.safeErrorMessage}</p>
           <button type="button" onClick={retry}>重试</button>

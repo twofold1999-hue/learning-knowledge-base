@@ -17,10 +17,15 @@ vi.mock('../runtime/desktopLifecycleBridge', () => ({
     cancelCloseRequest: vi.fn(),
   },
 }))
+vi.mock('./DesktopAISettingsPanel', () => ({
+  default: ({ onClose }: { onClose?: () => void }) => <section aria-label="桌面 AI 配置">配置面板<button type="button" onClick={onClose}>关闭</button></section>,
+}))
 vi.mock('../services/workspaceInitializer', () => ({ initializeWorkspace }))
 vi.mock('../services/saveCoordinator', () => ({ flushAllPendingSaves: vi.fn().mockResolvedValue({ success: true }) }))
 
 import DesktopLifecycleShell from './DesktopLifecycleShell'
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 describe('DesktopLifecycleShell', () => {
   let container: HTMLDivElement
@@ -51,5 +56,21 @@ describe('DesktopLifecycleShell', () => {
     await act(async () => { (Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '启动并进入知识库') as HTMLButtonElement).click() })
     expect(initializeWorkspace).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain('工作区内容')
+  })
+
+  it('opens and closes the reusable desktop AI settings panel from the control center', async () => {
+    getStatus.mockResolvedValue({ runtime: 'desktop', initialized: true, productName: '学习知识库', version: '0.2.0', identifier: 'com.learningknowledgebase.desktop', directoriesReady: true, previousUncleanExit: false })
+    listenCloseRequested.mockResolvedValue(() => undefined)
+    container = document.createElement('div')
+    document.body.append(container)
+    root = createRoot(container)
+
+    await act(async () => { root.render(<DesktopLifecycleShell><div>工作区内容</div></DesktopLifecycleShell>); await Promise.resolve() })
+    const configure = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '配置 AI') as HTMLButtonElement
+    expect(configure.disabled).toBe(false)
+    await act(async () => { configure.click(); await Promise.resolve() })
+    expect(container.textContent).toContain('配置面板')
+    await act(async () => { (Array.from(container.querySelectorAll('button')).find((button) => button.textContent === '关闭') as HTMLButtonElement).click(); await Promise.resolve() })
+    expect(container.textContent).not.toContain('配置面板')
   })
 })

@@ -1,6 +1,8 @@
 mod app_lifecycle;
 mod app_paths;
+mod desktop_ai_config;
 mod desktop_baseline;
+mod desktop_secret_store;
 mod external_source_opener;
 
 use tauri::Manager;
@@ -14,7 +16,10 @@ pub fn run() {
         }))
         .setup(|app| {
             let directories = app_paths::initialize_app_directories(app.handle())?;
-            let lifecycle = app_lifecycle::AppLifecycleState::initialize(directories.runtime)?;
+            let lifecycle =
+                app_lifecycle::AppLifecycleState::initialize(directories.runtime.clone())?;
+            app.manage(desktop_ai_config::DesktopAiState::initialize(&directories));
+            app.manage(directories);
             app.manage(lifecycle);
             app.manage(desktop_baseline::DesktopBaselineState::initialized());
 
@@ -30,6 +35,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_lifecycle::desktop_lifecycle_status,
+            desktop_ai_config::get_desktop_ai_settings,
+            desktop_ai_config::save_desktop_ai_settings,
+            desktop_ai_config::forget_desktop_ai_credential,
             app_lifecycle::cancel_close_request,
             app_lifecycle::request_graceful_exit,
             app_lifecycle::request_forced_exit,

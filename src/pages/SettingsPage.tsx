@@ -7,6 +7,8 @@ import { BackupTooLargeError } from '../services/dataValidation'
 import { waitForPendingSaves } from '../services/saveCoordinator'
 import { downloadNotesAsDocx, downloadNotesAsMarkdown, downloadNotesAsPdf, downloadPortableMarkdownArchive } from '../services/exportService'
 import { connectLocalBackupDirectory, disconnectLocalBackupDirectory, getLocalBackupStatus, type LocalBackupStatus, writeLocalBackup } from '../services/localBackupService'
+import DesktopAISettingsPanel from '../components/DesktopAISettingsPanel'
+import { isDesktopRuntime } from '../runtime/runtimeMode'
 
 function formatBytes(value?: number): string {
   if (!value) return '0 B'
@@ -244,6 +246,7 @@ export default function SettingsPage() {
           <button onClick={() => setTheme('light')} style={{ background: theme === 'light' ? 'var(--accent-soft)' : 'var(--surface)', border: '1px solid ' + (theme === 'light' ? 'var(--accent)' : 'var(--border)'), borderRadius: '8px', padding: '12px 24px', color: theme === 'light' ? 'var(--accent)' : 'var(--muted)', fontSize: '14px', fontWeight: 500 }}>亮色模式</button>
         </div>
       </section>
+      {isDesktopRuntime() && <section className="surface-card settings-card settings-card--wide" style={{ marginBottom: '40px' }}><DesktopAISettingsPanel /></section>}
       <section className="surface-card settings-card" style={{ marginBottom: '40px' }}>
         <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--ink)', marginBottom: '12px' }}>数据管理</h2>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>

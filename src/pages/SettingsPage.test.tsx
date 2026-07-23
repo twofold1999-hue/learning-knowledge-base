@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   setTheme: vi.fn(), loadDeletedNotes: vi.fn(), restoreDeletedNote: vi.fn(), permanentlyDeleteNote: vi.fn(), emptyTrash: vi.fn(),
   downloadNotesAsDocx: vi.fn(), downloadNotesAsMarkdown: vi.fn(), downloadNotesAsPdf: vi.fn(), downloadPortableMarkdownArchive: vi.fn(),
   allNotes: [] as unknown[],
+  isDesktopRuntime: vi.fn(),
+  getDesktopAISettings: vi.fn(),
 }))
 
 vi.mock('../stores/uiStore', () => ({ useUiStore: (selector: (state: { theme: 'light', setTheme: typeof mocks.setTheme }) => unknown) => selector({ theme: 'light', setTheme: mocks.setTheme }) }))
@@ -20,6 +22,14 @@ vi.mock('../services/backupService', () => ({ createBackup: mocks.createBackup, 
 vi.mock('../services/saveCoordinator', () => ({ waitForPendingSaves: mocks.waitForPendingSaves }))
 vi.mock('../services/localBackupService', () => ({ getLocalBackupStatus: mocks.getLocalBackupStatus, connectLocalBackupDirectory: mocks.connectLocalBackupDirectory, disconnectLocalBackupDirectory: mocks.disconnectLocalBackupDirectory, writeLocalBackup: mocks.writeLocalBackup }))
 vi.mock('../services/exportService', () => ({ downloadNotesAsDocx: mocks.downloadNotesAsDocx, downloadNotesAsMarkdown: mocks.downloadNotesAsMarkdown, downloadNotesAsPdf: mocks.downloadNotesAsPdf, downloadPortableMarkdownArchive: mocks.downloadPortableMarkdownArchive }))
+vi.mock('../runtime/runtimeMode', () => ({ isDesktopRuntime: mocks.isDesktopRuntime }))
+vi.mock('../runtime/desktopAISettingsBridge', () => ({
+  desktopAISettingsBridge: {
+    getSettings: mocks.getDesktopAISettings,
+    saveSettings: vi.fn(),
+    forgetCredential: vi.fn(),
+  },
+}))
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -47,6 +57,8 @@ beforeEach(async () => {
   mocks.serializeBackup.mockReturnValue('{"backup":true}')
   mocks.waitForPendingSaves.mockResolvedValue(undefined)
   mocks.allNotes = []
+  mocks.isDesktopRuntime.mockReturnValue(false)
+  mocks.getDesktopAISettings.mockResolvedValue({ schemaVersion: 1, provider: 'deepseek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-flash', timeoutMs: 65000, enabled: false, credentialConfigured: false, credentialMask: null, transportReady: false })
   mocks.getLocalBackupStatus.mockResolvedValue({ supported: false, connected: false, directoryName: null })
   vi.stubGlobal('confirm', vi.fn(() => true))
   vi.stubGlobal('setTimeout', ((callback: TimerHandler) => { if (typeof callback === 'function') callback(); return 0 }) as typeof setTimeout)
@@ -96,5 +108,14 @@ describe('SettingsPage 完整备份导出', () => {
     expect(container?.textContent).toContain('备份大小超过 100 MiB，未生成文件')
     await expect(db.notes.get(note.id)).resolves.toEqual(note)
     click.mockRestore()
+  })
+})
+describe('SettingsPage 桌面 AI 配置入口', () => {
+  it('reuses the desktop AI settings panel only in desktop mode', async () => {
+    mocks.isDesktopRuntime.mockReturnValue(true)
+    await renderSettings()
+    expect(container?.textContent).toContain('桌面 AI 配置')
+    expect(container?.querySelector('input[aria-label="API Key"]')).not.toBeNull()
+    expect(mocks.getDesktopAISettings).toHaveBeenCalledTimes(1)
   })
 })
